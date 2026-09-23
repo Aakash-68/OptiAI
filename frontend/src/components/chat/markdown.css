@@ -1,0 +1,200 @@
+/* ---------------------------------------------------------------------------
+   Assistant Markdown.
+
+   Scoped under .md-prose so nothing here leaks into the rest of the app. Every
+   colour is a design token from globals.css, so dark mode comes for free.
+--------------------------------------------------------------------------- */
+
+.md-prose {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.md-prose > :first-child { margin-top: 0; }
+.md-prose > :last-child { margin-bottom: 0; }
+
+.md-prose p { margin: 0 0 0.85em; }
+
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text);
+  margin: 1.4em 0 0.5em;
+}
+.md-prose h1 { font-size: 1.45em; }
+.md-prose h2 { font-size: 1.25em; }
+.md-prose h3 { font-size: 1.1em; }
+.md-prose h4 { font-size: 1em; }
+
+.md-prose strong { font-weight: 650; color: var(--text); }
+.md-prose em { font-style: italic; }
+.md-prose del { color: var(--text-subtle); }
+
+.md-prose a {
+  color: var(--color-accent-600);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--color-accent-600) 40%, transparent);
+  text-underline-offset: 2px;
+}
+.md-prose a:hover { text-decoration-color: currentColor; }
+
+.md-prose ul,
+.md-prose ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.5em;
+}
+.md-prose ul { list-style: disc; }
+.md-prose ol { list-style: decimal; }
+.md-prose li { margin: 0.25em 0; }
+.md-prose li > p { margin: 0.25em 0; }
+.md-prose li > ul,
+.md-prose li > ol { margin: 0.25em 0 0; }
+.md-prose ul.contains-task-list { list-style: none; padding-left: 0.4em; }
+.md-prose li.task-list-item input { margin-right: 0.5em; vertical-align: -1px; accent-color: var(--brand); }
+
+.md-prose blockquote {
+  margin: 0 0 0.85em;
+  padding: 0.35em 1em;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  border-radius: 0 10px 10px 0;
+  color: var(--text-muted);
+}
+.md-prose blockquote > :last-child { margin-bottom: 0; }
+
+.md-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.4em 0;
+}
+
+/* Inline code — distinct from a block, and never breaks a word in half. */
+.md-prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Tables */
+.md-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.4em 0 1em;
+  font-size: 0.93em;
+  display: block;
+  overflow-x: auto;
+}
+.md-prose thead { background: var(--surface-sunken); }
+.md-prose th,
+.md-prose td {
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.md-prose th {
+  font-size: 0.82em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+.md-prose tr:last-child td { border-bottom: 0; }
+.md-prose tbody tr:hover td { background: var(--surface-hover); }
+
+/* ---------------------------------------------------------------------------
+   Code blocks. The chrome (header, copy button) lives in CodeBlock.tsx; this is
+   the scrolling body and the highlight theme.
+--------------------------------------------------------------------------- */
+
+.md-code {
+  margin: 0.4em 0 1em;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.md-code pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.md-code pre code {
+  font-family: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  white-space: pre;
+  color: var(--text);
+}
+
+/* highlight.js token colours. Light values first; dark overrides below. */
+.md-code .hljs-comment,
+.md-code .hljs-quote { color: var(--text-subtle); font-style: italic; }
+.md-code .hljs-keyword,
+.md-code .hljs-selector-tag,
+.md-code .hljs-meta { color: var(--color-brand-700); }
+.md-code .hljs-string,
+.md-code .hljs-regexp,
+.md-code .hljs-addition { color: var(--color-ok-700); }
+.md-code .hljs-number,
+.md-code .hljs-literal,
+.md-code .hljs-symbol,
+.md-code .hljs-bullet { color: var(--color-accent-700); }
+.md-code .hljs-title,
+.md-code .hljs-title.function_,
+.md-code .hljs-title.class_,
+.md-code .hljs-section,
+.md-code .hljs-name { color: var(--color-accent-600); font-weight: 600; }
+.md-code .hljs-attr,
+.md-code .hljs-attribute,
+.md-code .hljs-variable,
+.md-code .hljs-template-variable,
+.md-code .hljs-property { color: var(--color-warn-700); }
+.md-code .hljs-built_in,
+.md-code .hljs-type,
+.md-code .hljs-class { color: var(--color-brand-600); }
+.md-code .hljs-deletion { color: var(--color-err-600); }
+.md-code .hljs-emphasis { font-style: italic; }
+.md-code .hljs-strong { font-weight: 700; }
+
+[data-theme="dark"] .md-code .hljs-keyword,
+[data-theme="dark"] .md-code .hljs-selector-tag,
+[data-theme="dark"] .md-code .hljs-meta { color: var(--color-brand-300); }
+[data-theme="dark"] .md-code .hljs-string,
+[data-theme="dark"] .md-code .hljs-regexp,
+[data-theme="dark"] .md-code .hljs-addition { color: #6ee7b7; }
+[data-theme="dark"] .md-code .hljs-number,
+[data-theme="dark"] .md-code .hljs-literal,
+[data-theme="dark"] .md-code .hljs-symbol,
+[data-theme="dark"] .md-code .hljs-bullet { color: var(--color-accent-300); }
+[data-theme="dark"] .md-code .hljs-title,
+[data-theme="dark"] .md-code .hljs-title.function_,
+[data-theme="dark"] .md-code .hljs-title.class_,
+[data-theme="dark"] .md-code .hljs-section,
+[data-theme="dark"] .md-code .hljs-name { color: var(--color-accent-300); }
+[data-theme="dark"] .md-code .hljs-attr,
+[data-theme="dark"] .md-code .hljs-attribute,
+[data-theme="dark"] .md-code .hljs-variable,
+[data-theme="dark"] .md-code .hljs-template-variable,
+[data-theme="dark"] .md-code .hljs-property { color: #fcd34d; }
+[data-theme="dark"] .md-code .hljs-built_in,
+[data-theme="dark"] .md-code .hljs-type,
+[data-theme="dark"] .md-code .hljs-class { color: var(--color-brand-300); }
+[data-theme="dark"] .md-code .hljs-deletion { color: #fca5a5; }

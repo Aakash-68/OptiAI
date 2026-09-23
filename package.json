@@ -1,0 +1,18 @@
+{
+  "name": "optiai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OptiAI - AI optimizer built on routing logic extracted from 9Router.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "app": "concurrently -n backend,frontend -c blue,green -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "backend": "npm run dev -w backend",
+    "frontend": "npm run dev -w frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

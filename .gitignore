@@ -1,0 +1,16 @@
+node_modules/
+
+# Local environment. `.env.*` catches .env.local, .env.production and friends
+# at any depth; the negation keeps the committed templates, which carry
+# placeholders only and are the one place to look up what a variable is for.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# SQLite database + provider credentials (OAuth tokens, provider API keys).
+backend/.data/
+
+.next/
+out/
+*.log

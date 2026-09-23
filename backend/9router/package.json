@@ -1,0 +1,9 @@
+{
+  "name": "9router-core",
+  "version": "0.5.75",
+  "private": true,
+  "type": "module",
+  "description": "Routing/provider/translation logic extracted from 9Router v0.5.75. Do not edit by hand - see docs/9router-extraction.md.",
+  "comment_version": "open-sse/config/appConstants.js reads this version via createRequire('../../package.json') and sends it in upstream User-Agent headers. Keep it aligned with the upstream 9Router release this tree was extracted from.",
+  "comment_resolution": "The '@/*' and 'open-sse/*' specifiers used throughout this tree are resolved at runtime by backend/server/hooks.mjs, so the extracted sources stay byte-identical to upstream."
+}

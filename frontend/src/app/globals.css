@@ -1,0 +1,394 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   OptiAI design tokens
+
+   Every brand colour below is sampled directly from Assets/Symbol.png. The mark
+   is a single linear gradient running blue -> violet:
+
+       blue end    #1F79FC
+       midpoint    #6768FB
+       violet end  #9642FD
+       body of mark#8E55FB   (the most common pixel, and our primary)
+
+   Nothing here is borrowed from any reference screenshot — layout only was.
+--------------------------------------------------------------------------- */
+
+/* Dark mode is driven by data-theme on <html>, not the OS, so the in-app
+   toggle in Settings is authoritative. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* -- Brand: violet ramp anchored on the logo's #8E55FB ------------------ */
+  --color-brand-50: #f6f2fe;
+  --color-brand-100: #ede4fd;
+  --color-brand-200: #dccbfc;
+  --color-brand-300: #c3a7fa;
+  --color-brand-400: #a87ef8;
+  --color-brand-500: #8e55fb;
+  --color-brand-600: #7b3bef;
+  --color-brand-700: #6528d4;
+  --color-brand-800: #5222ac;
+  --color-brand-900: #431d8a;
+  --color-brand-950: #2a1160;
+
+  /* -- Brand: blue ramp anchored on the logo's #2F80FC ------------------- */
+  --color-accent-50: #eff6ff;
+  --color-accent-100: #dbeafe;
+  --color-accent-200: #bfdbfe;
+  --color-accent-300: #93c1fd;
+  --color-accent-400: #5fa0fd;
+  --color-accent-500: #2f80fc;
+  --color-accent-600: #1c66e0;
+  --color-accent-700: #1750b4;
+  --color-accent-800: #174490;
+  --color-accent-900: #183b73;
+
+  /* -- Neutrals: very slightly cool so they sit under the violet --------- */
+  --color-ink-50: #f8f8fa;
+  --color-ink-100: #f1f1f5;
+  --color-ink-200: #e5e5ec;
+  --color-ink-300: #d2d2dd;
+  --color-ink-400: #9f9fb0;
+  --color-ink-500: #74748a;
+  --color-ink-600: #55556b;
+  --color-ink-700: #414154;
+  --color-ink-800: #2a2a38;
+  --color-ink-900: #1a1a25;
+  --color-ink-950: #101018;
+
+  /* -- Status ------------------------------------------------------------ */
+  --color-ok-50: #ecfdf5;
+  --color-ok-500: #10b981;
+  --color-ok-600: #059669;
+  --color-ok-700: #047857;
+  --color-warn-50: #fffbeb;
+  --color-warn-500: #f59e0b;
+  --color-warn-600: #d97706;
+  --color-warn-700: #b45309;
+  --color-err-50: #fef2f2;
+  --color-err-500: #ef4444;
+  --color-err-600: #dc2626;
+  --color-err-700: #b91c1c;
+
+  /* -- Type -------------------------------------------------------------- */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, "SFMono-Regular", monospace;
+
+  /* -- Motion ------------------------------------------------------------ */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   Semantic surface tokens. Components reference these, never raw ramp steps,
+   so light/dark stays a one-place change.
+--------------------------------------------------------------------------- */
+:root {
+  --canvas: #f7f7fa; /* app background behind the panels */
+  --surface: #ffffff; /* cards, sidebar, topbar */
+  --surface-raised: #ffffff; /* modals, popovers */
+  --surface-sunken: #f8f8fa; /* inset wells, code blocks, table heads */
+  --surface-hover: #f3f3f7;
+  --border: #e5e5ec;
+  --border-strong: #d2d2dd;
+  --text: #1a1a25;
+  --text-muted: #55556b;
+  --text-subtle: #74748a;
+  --text-on-brand: #ffffff;
+
+  --brand: var(--color-brand-500);
+  --brand-hover: var(--color-brand-600);
+  --brand-soft: var(--color-brand-50);
+  --brand-soft-border: var(--color-brand-200);
+  --ring: color-mix(in oklab, var(--color-brand-500) 45%, transparent);
+
+  /* The logo gradient, reused for the mark, AI-search glow and primary CTAs. */
+  --grad-brand: linear-gradient(103deg, #2f80fc 0%, #6768fb 48%, #9642fd 100%);
+
+  /*
+   * The mark's own blue→purple, sampled straight off the artwork. Deeper and
+   * more saturated than --grad-brand, which is tuned to sit behind UI text.
+   * Used where the surface is meant to read as "the logo", not as a tint.
+   */
+  --grad-logo: linear-gradient(103deg, #2e8cff 0%, #6b5bfc 50%, #9143fd 100%);
+
+  /* The natural-language search bar on Models and Skills. */
+  --ai-bar: color-mix(in oklab, #6b5bfc 9%, #ededf4);
+  --ai-bar-border: color-mix(in oklab, #6b5bfc 26%, var(--border));
+
+  --shadow-sm: 0 1px 2px 0 rgb(16 16 24 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(16 16 24 / 0.08), 0 2px 4px -2px rgb(16 16 24 / 0.04);
+  --shadow-lg: 0 16px 40px -8px rgb(16 16 24 / 0.14), 0 4px 12px -4px rgb(16 16 24 / 0.06);
+}
+
+[data-theme="dark"] {
+  --canvas: #0d0d14;
+  --surface: #14141d;
+  --surface-raised: #1a1a25;
+  --surface-sunken: #101018;
+  --surface-hover: #1f1f2b;
+  --border: #272733;
+  --border-strong: #35354550;
+  --text: #f1f1f5;
+  --text-muted: #9f9fb0;
+  --text-subtle: #74748a;
+  --text-on-brand: #ffffff;
+
+  --brand: var(--color-brand-400);
+  --brand-hover: var(--color-brand-300);
+  --brand-soft: color-mix(in oklab, var(--color-brand-500) 14%, transparent);
+  --brand-soft-border: color-mix(in oklab, var(--color-brand-400) 32%, transparent);
+
+  --ai-bar: color-mix(in oklab, #6b5bfc 15%, var(--surface));
+  --ai-bar-border: color-mix(in oklab, #6b5bfc 34%, var(--border));
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+}
+
+/* Expose the semantic tokens to Tailwind utilities (bg-surface, text-muted…) */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-hover: var(--surface-hover);
+  --color-border-base: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text-base: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+}
+
+/* --------------------------------------------------------------------------- */
+
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand-500) 28%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/*
+ * The chat bar wears the BorderBeam, so its controls don't also paint the
+ * brand outline — a purple ring inside an animated purple edge reads as a
+ * rendering glitch, not as focus. Focus stays visible here, just neutral:
+ * dropping the indicator entirely would strand keyboard users on the one
+ * control they use most.
+ */
+[data-chat-bar] :focus-visible {
+  outline-color: var(--border-strong);
+  outline-offset: 1px;
+}
+
+/*
+ * Text fields opt out of the focus ring entirely. Every one of them already
+ * shifts its own border on focus, so the state stays legible without the
+ * brand-coloured box that used to sit around the field. Buttons, links and
+ * everything else keep the ring above — they have no other focus signal.
+ */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* Scrollbars: thin and neutral so dense tables stay calm. */
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-subtle);
+  background-clip: content-box;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared utility classes
+--------------------------------------------------------------------------- */
+
+/* The logo gradient as text or as a fill. */
+.grad-brand {
+  background-image: var(--grad-brand);
+}
+.grad-logo {
+  background-image: var(--grad-logo);
+}
+.grad-text {
+  background-image: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A 1px gradient hairline used to mark active/AI surfaces. */
+.grad-border {
+  position: relative;
+  background-clip: padding-box;
+}
+.grad-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--grad-brand);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* The AI-search glow: a soft gradient bloom behind the input. */
+.ai-glow {
+  position: relative;
+}
+.ai-glow::after {
+  content: "";
+  position: absolute;
+  inset: -22px;
+  border-radius: inherit;
+  background: var(--grad-logo);
+  filter: blur(34px);
+  opacity: 0;
+  transition: opacity 420ms var(--ease-out-soft);
+  pointer-events: none;
+  z-index: -1;
+}
+.ai-glow:focus-within::after {
+  opacity: 0.3;
+}
+
+/*
+ * A selected nav row eases in from 2px left. Enough to confirm the click
+ * without the rail appearing to jump — nav is clicked a handful of times a
+ * session, so it can afford motion that a constantly-pressed control cannot.
+ */
+@keyframes nav-select {
+  from {
+    transform: translateX(-2px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.nav-select {
+  animation: nav-select 240ms var(--ease-out-soft) both;
+}
+
+/*
+ * "Thinking…" while the first token is still in flight. Grey text breathing
+ * between two opacities — the convention every other assistant uses, and
+ * quieter than a row of bouncing dots.
+ */
+@keyframes think-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+.think-pulse {
+  animation: think-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-select {
+    animation: none;
+  }
+  .think-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.animate-in {
+  animation: fade-rise 260ms var(--ease-out-soft) both;
+}
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Three-dot "assistant is typing" indicator. */
+@keyframes dot-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.dot-pulse > span {
+  animation: dot-pulse 1.3s infinite;
+}
+.dot-pulse > span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.dot-pulse > span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

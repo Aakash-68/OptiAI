@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 330.5 191" fill="none" role="img" aria-label="OptiAI">
+<defs><linearGradient id="om" gradientUnits="userSpaceOnUse" x1="-4.5" y1="140.5" x2="335.5" y2="50.5">
+<stop offset="0" stop-color="#2E8CFF"/><stop offset=".5" stop-color="#6B5BFC"/><stop offset="1" stop-color="#9143FD"/>
+</linearGradient></defs>
+<g stroke="url(#om)" stroke-width="31" stroke-linecap="round" stroke-linejoin="round">
+<path d="M15.5,74.5 L64.5,74.5 L123.5,15.5 L219.5,15.5"/>
+<path d="M51.5,137.5 L96.0,137.5 L134.0,175.5 L221.5,175.5 L315.0,97.5 L263.0,54.2"/>
+</g>
+<path d="M171.0,45.5 Q187.8,79.5 223.5,95.5 Q187.8,111.5 171.0,145.5 Q154.2,111.5 118.5,95.5 Q154.2,79.5 171.0,45.5 Z" fill="url(#om)"/>
+</svg>

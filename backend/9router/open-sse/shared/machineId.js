@@ -1,0 +1,22 @@
+// OptiAI: node-machine-id is CommonJS. Next's bundler resolved the named import for
+// 9Router; plain Node's CJS export detection does not, so destructure the default.
+import nodeMachineId from "node-machine-id";
+const { machineIdSync } = nodeMachineId;
+import crypto from "node:crypto";
+
+let cachedRawId = null;
+
+function loadRawMachineId() {
+  if (cachedRawId) return cachedRawId;
+  try {
+    cachedRawId = machineIdSync();
+  } catch {
+    cachedRawId = crypto.randomUUID();
+  }
+  return cachedRawId;
+}
+
+export async function getConsistentMachineId(salt = "endpoint-proxy-salt") {
+  const rawId = loadRawMachineId();
+  return crypto.createHash("sha256").update(rawId + salt).digest("hex").substring(0, 16);
+}
