@@ -6,8 +6,8 @@ import { X } from "lucide-react";
 import { cx } from "@/lib/format";
 
 /**
- * Centred dialog. Follows the traffic-light header treatment from the reference
- * layouts — the three dots are decorative, only the right-hand X closes.
+ * Centred dialog with a traffic-light header. The red light closes — it grows
+ * a small X on hover — and the other two are decorative.
  */
 export function Modal({
   open,
@@ -57,21 +57,26 @@ export function Modal({
         )}
       >
         <header className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-3.5">
-          <span className="flex gap-1.5" aria-hidden>
-            <span className="h-3 w-3 rounded-full bg-err-500" />
-            <span className="h-3 w-3 rounded-full bg-[var(--border-strong)]" />
-            <span className="h-3 w-3 rounded-full bg-[var(--border-strong)]" />
+          {/*
+           * macOS-style lights. The red one is the close control: the X only
+           * appears inside it on hover, so at rest the header stays three
+           * quiet dots. The other two are decorative and say so to AT.
+           */}
+          <span className="group/lights flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="grid h-3 w-3 place-items-center rounded-full bg-err-500 text-transparent transition-colors hover:brightness-95 group-hover/lights:text-[rgba(0,0,0,0.55)]"
+            >
+              <X className="h-2 w-2" strokeWidth={3} />
+            </button>
+            <span aria-hidden className="h-3 w-3 rounded-full bg-[var(--border-strong)]" />
+            <span aria-hidden className="h-3 w-3 rounded-full bg-[var(--border-strong)]" />
           </span>
-          <h2 className="font-display flex-1 text-center text-sm font-semibold text-[var(--text)]">
+          <h2 className="font-display flex-1 pr-[54px] text-center text-sm font-semibold text-[var(--text)]">
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="rounded-md p-1 text-[var(--text-subtle)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </header>
 
         <div className="max-h-[70vh] overflow-y-auto px-5 py-5">{children}</div>

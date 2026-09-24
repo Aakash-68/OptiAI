@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -9,21 +9,27 @@ import {
   Hash,
   Layers,
   MessageSquare,
+  RefreshCw,
   Timer,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/AppShell";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { Button } from "@/components/ui/Button";
+import { SearchInput } from "@/components/ui/Input";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
 import { AreaChart } from "@/components/charts/AreaChart";
 import { BarList, RatioBar } from "@/components/charts/BarList";
+import { ProviderTopology } from "@/components/network/ProviderTopology";
+import { RequestsRail } from "@/components/network/RequestsRail";
 import { getRecentUsage, getTraces, getUsageChart, getUsageStats } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import {
   compactNumber,
+  cx,
   formatCost,
   formatLatency,
   formatNumber,
@@ -32,25 +38,71 @@ import {
 } from "@/lib/format";
 import type { PromptTrace, UsageBucket } from "@/lib/types";
 
+/**
+ * The stats period and the chart period are the same string now. They used to
+ * differ ("today" → "1d"), and "1d" was not a period the chart understood, so
+ * it fell through to sixty days of empty days with one spike at the end.
+ */
 const PERIODS = [
-  { id: "today", label: "Today", chart: "1d" },
-  { id: "24h", label: "24h", chart: "1d" },
-  { id: "7d", label: "7D", chart: "7d" },
-  { id: "30d", label: "30D", chart: "30d" },
-  { id: "60d", label: "60D", chart: "60d" },
+  { id: "today", label: "Today" },
+  { id: "24h", label: "24h" },
+  { id: "7d", label: "7D" },
+  { id: "30d", label: "30D" },
+  { id: "60d", label: "60D" },
 ];
+
+const HOUR = 3600000;
+
+/** "$0.00" — two decimals, for tiles that have no room for four. */
+function formatCostShort(n: number) {
+  if (!n) return "$0.00";
+  return n < 0.01 ? "<$0.01" : `$${n.toFixed(2)}`;
+}
+
+/** "Per hour today", "6-hour buckets across 7 days" — what one point means. */
+function bucketBlurb(period: string, bucketMs: number | undefined) {
+  if (!bucketMs) return "";
+  const hours = bucketMs / HOUR;
+  const width = hours >= 24 ? "Per day" : hours === 1 ? "Per hour" : `${hours}-hour buckets`;
+  const span =
+    period === "today" ? "today" : period === "24h" ? "over the last 24 hours" : `across the last ${period.replace("d", " days")}`;
+  return `${width} ${span}`;
+}
 
 export default function UsagePage() {
   const [period, setPeriod] = useState("7d");
   const [view, setView] = useState("overview");
   const [metric, setMetric] = useState<"tokens" | "cost">("tokens");
 
-  const chartPeriod = PERIODS.find((p) => p.id === period)?.chart || "7d";
-
   const stats = useApi(() => getUsageStats(period), [period]);
-  const chart = useApi(() => getUsageChart(chartPeriod), [chartPeriod]);
+  const chart = useApi(() => getUsageChart(period), [period]);
   const recent = useApi(() => getRecentUsage(40), []);
   const traces = useApi(() => getTraces(50), []);
+  // Picked from the rail beside the map; opens that row on the Prompts tab.
+  const [focusPrompt, setFocusPrompt] = useState<string | null>(null);
+
+  /**
+   * Refresh re-reads everything and re-probes the map. Separately, the two
+   * live panels — the map and the request log — re-read themselves every
+   * 15 s, so traffic from a CLI shows up without touching anything. The
+   * chart and totals do not poll: they are period views, not a feed.
+   */
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  async function refreshAll() {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    try {
+      await Promise.all([stats.refetch(), chart.refetch(), recent.refetch(), traces.refetch()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+  useEffect(() => {
+    const timer = setInterval(() => void traces.refetch(), 15000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // `/usage/recent` returns an envelope, not a bare array. Reading it as an
   // array is what made this table render empty regardless of traffic.
@@ -66,12 +118,12 @@ export default function UsagePage() {
   const cost = stats.data?.totalCost ?? 0;
   const requests = stats.data?.totalRequests ?? 0;
 
-  // Labels arrive already formatted for the period (times for intraday, dates
-  // otherwise) and tokens already summed, so neither is recomputed here.
+  // Each point carries its bucket start; the chart lays the axis out by time.
   const series = useMemo(
     () =>
-      (chart.data || []).map((point) => ({
+      (chart.data?.points || []).map((point) => ({
         label: point.label,
+        ts: new Date(point.ts).getTime(),
         value: metric === "cost" ? (point.cost ?? 0) : (point.tokens ?? 0),
       })),
     [chart.data, metric]
@@ -139,13 +191,22 @@ export default function UsagePage() {
             size="sm"
           />
           <Tabs tabs={PERIODS} active={period} onChange={setPeriod} size="sm" />
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label="Refresh"
+            title="Re-read everything and re-check the network"
+            icon={<RefreshCw className={cx("h-3.5 w-3.5", refreshing && "animate-spin")} />}
+            onClick={() => void refreshAll()}
+            disabled={refreshing}
+          />
         </div>
       }
     >
       {stats.error && <ErrorNote message={stats.error} className="mb-4" />}
 
       {/* KPI row */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-3 @3xl:grid-cols-3 @5xl:grid-cols-5">
         {stats.loading ? (
           Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)
         ) : (
@@ -178,7 +239,14 @@ export default function UsagePage() {
             />
             <StatCard
               label="Est. cost"
-              value={formatCost(cost)}
+              value={
+                /* Four decimals need the room a full-width card has; in a
+                   pane the tile shows two so the number never spills. */
+                <>
+                  <span className="@5xl:hidden">{formatCostShort(cost)}</span>
+                  <span className="hidden @5xl:inline">{formatCost(cost)}</span>
+                </>
+              }
               accent="cost"
               icon={<Coins className="h-3.5 w-3.5" />}
               sub="Estimated, not actual billing"
@@ -189,12 +257,30 @@ export default function UsagePage() {
 
       {view === "overview" ? (
         <div className="space-y-5">
+          {/* Network map + the compact request log beside it */}
+          <div className="grid gap-5 @5xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
+            <Card padded={false} className="min-h-[480px]">
+              <ProviderTopology refreshKey={refreshKey} />
+            </Card>
+            <Card padded={false} className="max-h-[560px] min-h-[360px]">
+              <RequestsRail
+                rows={traceRows}
+                loading={traces.loading}
+                selected={focusPrompt}
+                onSelect={(id) => {
+                  setFocusPrompt(id);
+                  setView("prompts");
+                }}
+              />
+            </Card>
+          </div>
+
           {/* Trend */}
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <CardHeader
                 title={metric === "cost" ? "Cost over time" : "Token usage over time"}
-                description={`Aggregated per day across the last ${chartPeriod}`}
+                description={bucketBlurb(period, chart.data?.bucketMs)}
               />
               <Tabs
                 tabs={[
@@ -218,7 +304,7 @@ export default function UsagePage() {
           </Card>
 
           {/* Distributions */}
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 @3xl:grid-cols-2">
             <Card>
               <CardHeader title="Usage by model" description="Ranked by request count" />
               <div className="mt-4">
@@ -238,7 +324,7 @@ export default function UsagePage() {
             </Card>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 @3xl:grid-cols-2">
             <Card>
               <CardHeader
                 title="Input / output split"
@@ -274,7 +360,7 @@ export default function UsagePage() {
           </div>
         </div>
       ) : view === "prompts" ? (
-        <PromptsTable rows={traceRows} loading={traces.loading} error={traces.error} />
+        <PromptsTable rows={traceRows} loading={traces.loading} error={traces.error} focus={focusPrompt} />
       ) : (
         /* Requests: the raw gateway log — chat plus anything a CLI tool sent. */
         <Card padded={false}>
@@ -380,19 +466,66 @@ function PromptsTable({
   rows,
   loading,
   error,
+  focus,
 }: {
   rows: PromptTrace[];
   loading: boolean;
   error?: string | null;
+  /** A row picked elsewhere (the rail beside the map) opens expanded. */
+  focus?: string | null;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(focus ?? null);
+  useEffect(() => {
+    if (focus) setExpanded(focus);
+  }, [focus]);
+
+  /**
+   * Search highlights rather than filters: the rows around a match are the
+   * context that makes it worth finding. The first hit scrolls into view.
+   */
+  const [search, setSearch] = useState("");
+  const needle = search.trim().toLowerCase();
+  const matches = (id: string) => Boolean(needle) && id.toLowerCase().includes(needle);
+  const firstHitRef = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (needle) firstHitRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [needle]);
+
+  /**
+   * Rows are newest-first, so prompts from the same conversation sit
+   * together. Each run of one thread gets a group index; runs alternate
+   * between a soft purple wash and none, so where one chat ends and the next
+   * begins is visible without a column for it.
+   */
+  const groupOf = useMemo(() => {
+    const out = new Map<string, number>();
+    let group = -1;
+    let prev: string | null | undefined = undefined;
+    for (const row of rows) {
+      const key = row.threadId || `solo:${row.promptId}`;
+      if (key !== prev) {
+        group += 1;
+        prev = key;
+      }
+      out.set(row.promptId, group);
+    }
+    return out;
+  }, [rows]);
+
+  let hitSeen = false;
 
   return (
     <Card padded={false}>
-      <div className="border-b border-[var(--border)] px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
         <CardHeader
           title="Prompts"
-          description="One row per prompt sent from Chat, traced end to end by its prompt ID"
+          description="One row per prompt sent from Chat, traced end to end by its prompt ID. Rows of one conversation share a tint."
+        />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Find a prompt ID…"
+          className="w-full max-w-[260px]"
         />
       </div>
 
@@ -433,14 +566,29 @@ function PromptsTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const tinted = (groupOf.get(row.promptId) ?? 0) % 2 === 0;
+                const hit = matches(row.promptId);
+                const isFirstHit = hit && !hitSeen;
+                if (hit) hitSeen = true;
+                return (
                 <Fragment key={row.promptId}>
                   <tr
+                    ref={isFirstHit ? firstHitRef : undefined}
                     onClick={() => setExpanded(expanded === row.promptId ? null : row.promptId)}
-                    className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-hover)]"
+                    title={row.threadId ? `Chat ${row.threadId}` : undefined}
+                    className={cx(
+                      "cursor-pointer border-b border-[var(--border)] transition-colors last:border-0",
+                      hit
+                        ? "bg-[var(--brand-soft)] shadow-[inset_3px_0_0_var(--brand)]"
+                        : tinted
+                          ? "bg-[color-mix(in_oklab,var(--brand)_5%,transparent)] hover:bg-[color-mix(in_oklab,var(--brand)_9%,transparent)]"
+                          : "hover:bg-[var(--surface-hover)]",
+                      needle && !hit && "opacity-55"
+                    )}
                   >
                     <td className="px-5 py-2.5 font-mono text-[11.5px] text-[var(--text)]">
-                      {row.promptId}
+                      {hit ? <Highlight text={row.promptId} needle={needle} /> : row.promptId}
                     </td>
                     <td className="max-w-[200px] truncate px-3 py-2.5 font-mono text-[11.5px] text-[var(--text-muted)]">
                       {shortModelName(row.resolvedModel || row.requestedModel || "—")}
@@ -480,7 +628,7 @@ function PromptsTable({
                   </tr>
 
                   {expanded === row.promptId && (
-                    <tr className="border-b border-[var(--border)]">
+                    <tr className={cx("border-b border-[var(--border)]", hit && "shadow-[inset_3px_0_0_var(--brand)]")}>
                       <td colSpan={9} className="bg-[var(--surface-sunken)] px-5 py-4">
                         <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
                           <Detail label="Requested model" value={row.requestedModel || "—"} mono />
@@ -524,7 +672,8 @@ function PromptsTable({
                     </tr>
                   )}
                 </Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -533,10 +682,25 @@ function PromptsTable({
       {rows.length > 0 && (
         <p className="flex items-center gap-2 border-t border-[var(--border)] px-5 py-3 text-[12px] text-[var(--text-subtle)]">
           <Timer className="h-3.5 w-3.5" />
-          Click a row to see the full trace. The same ID is shown under the answer in Chat.
+          {needle
+            ? `${rows.filter((r) => matches(r.promptId)).length} matching ${rows.filter((r) => matches(r.promptId)).length === 1 ? "prompt" : "prompts"} highlighted.`
+            : "Click a row to see the full trace. The same ID is shown under the answer in Chat."}
         </p>
       )}
     </Card>
+  );
+}
+
+/** The matched part of an id in brand colour, the rest as it was. */
+function Highlight({ text, needle }: { text: string; needle: string }) {
+  const at = text.toLowerCase().indexOf(needle);
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-[var(--brand)] px-0.5 text-white">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
+    </>
   );
 }
 

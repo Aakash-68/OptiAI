@@ -55,12 +55,26 @@ export function ScoreCard({
   const clamped = Math.max(0, Math.min(100, value));
   const t = TONES[tone];
 
-  // Semi-circular arc, 180° sweep.
-  const size = 132;
-  const stroke = 12;
+  /*
+   * A 240-degree gauge rather than a flat semicircle: it is squarer, so it
+   * scales down beside the number without the ends being cut off in a narrow
+   * pane. Drawn in a fixed viewBox and sized by CSS, so the card never
+   * overflows.
+   */
+  const size = 120;
+  const stroke = 11;
   const r = (size - stroke) / 2;
-  const cy = size / 2;
-  const circumference = Math.PI * r;
+  const c = size / 2;
+  const sweep = 240;
+  const startAngle = 90 + (360 - sweep) / 2; // degrees, clockwise from 12 o'clock
+  const polar = (deg: number) => {
+    const rad = ((deg - 90) * Math.PI) / 180;
+    return { x: c + r * Math.cos(rad), y: c + r * Math.sin(rad) };
+  };
+  const a = polar(startAngle);
+  const b = polar(startAngle + sweep);
+  const arc = `M ${a.x} ${a.y} A ${r} ${r} 0 1 1 ${b.x} ${b.y}`;
+  const length = (Math.PI * 2 * r * sweep) / 360;
 
   return (
     <div
@@ -84,16 +98,14 @@ export function ScoreCard({
         </div>
       </div>
 
-      <div className="mt-2 flex items-end justify-between gap-2">
-        <p className="font-display text-[46px] font-bold leading-none tracking-tight text-[var(--text)] tabular-nums">
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="font-display text-[44px] font-bold leading-none tracking-tight text-[var(--text)] tabular-nums">
           {Math.round(clamped)}
         </p>
 
         <svg
-          width={size}
-          height={size / 2 + 12}
-          viewBox={`0 0 ${size} ${size / 2 + 12}`}
-          className="shrink-0"
+          viewBox={`0 0 ${size} ${size}`}
+          className="h-auto w-[38%] min-w-[72px] max-w-[112px] shrink-0"
           role="img"
           aria-label={`${Math.round(clamped)} out of 100`}
         >
@@ -104,31 +116,19 @@ export function ScoreCard({
             </linearGradient>
           </defs>
 
+          <path d={arc} fill="none" stroke="var(--surface-sunken)" strokeWidth={stroke} strokeLinecap="round" />
           <path
-            d={`M ${stroke / 2} ${cy} A ${r} ${r} 0 0 1 ${size - stroke / 2} ${cy}`}
-            fill="none"
-            stroke="var(--surface-sunken)"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-          />
-          <path
-            d={`M ${stroke / 2} ${cy} A ${r} ${r} 0 0 1 ${size - stroke / 2} ${cy}`}
+            d={arc}
             fill="none"
             stroke={`url(#${id})`}
             strokeWidth={stroke}
             strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - clamped / 100)}
+            strokeDasharray={length}
+            strokeDashoffset={length * (1 - clamped / 100)}
             style={{ transition: "stroke-dashoffset 900ms cubic-bezier(0.22,1,0.36,1)" }}
           />
 
-          <text
-            x={size / 2}
-            y={cy - 4}
-            textAnchor="middle"
-            className="fill-[var(--text-subtle)]"
-            style={{ fontSize: 11 }}
-          >
+          <text x={c} y={c + 5} textAnchor="middle" className="fill-[var(--text-subtle)]" style={{ fontSize: 13 }}>
             {Math.round(clamped)} / 100
           </text>
         </svg>

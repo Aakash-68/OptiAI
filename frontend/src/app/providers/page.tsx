@@ -80,7 +80,7 @@ export default function ProvidersPage() {
       {error && <ErrorNote message={error} className="mb-4" />}
 
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
             <Skeleton key={i} className="h-[196px] rounded-2xl" />
           ))}
@@ -92,7 +92,7 @@ export default function ProvidersPage() {
           description="Try a different search term or clear the filter."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {filtered.map((provider) => (
             <ProviderCard
               key={provider.id}

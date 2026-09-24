@@ -11,6 +11,7 @@ import { useChatMode } from "@/hooks/useChatMode";
 import { useStreams } from "@/hooks/useStreams";
 import { useProjects } from "@/hooks/useProjects";
 import { useLocalStorage } from "@/hooks/useApi";
+import { usePane } from "@/hooks/useSplitView";
 import {
   buildContent,
   buildTranscriptText,
@@ -53,18 +54,40 @@ The request:
 `;
 
 /**
- * Sent as a system turn on every request. Two jobs: keep answers in Markdown
- * (which the transcript renders), and give the model one convention for
- * producing a downloadable file, which the transcript turns into a download
- * card. Deliberately short — it rides on every prompt.
+ * Sent as a system turn on every request: keep answers in Markdown, which the
+ * transcript renders. Deliberately short — it rides on every prompt.
  */
-const FORMAT_INSTRUCTION = `Format answers in Markdown: headings, lists, tables and fenced code blocks with a language tag where useful.
-When the user asks for a downloadable file, report or document, put its complete content in ONE fenced block whose info string is "file <filename.ext>", for example:
-\`\`\`file weekly-report.pdf
+const FORMAT_INSTRUCTION = `Format answers in Markdown: headings, lists, tables and fenced code blocks with a language tag where useful. Answer directly in the chat.`;
+
+/**
+ * Added only when the user actually asked for a file. Sending it on every
+ * turn taught models to wrap ordinary answers in a file block — and a model
+ * that half-follows the convention produces an empty card instead of the
+ * answer. The fence is four backticks so a plan that itself contains code
+ * blocks cannot close the file early.
+ */
+const FILE_INSTRUCTION = `
+The user wants a downloadable file. Put its COMPLETE content in ONE fenced block opened with four backticks and the info string "file <filename.ext>", for example:
+\`\`\`\`file weekly-report.pdf
 # Weekly report
 ...
-\`\`\`
-Write the file body in Markdown. Supported extensions: pdf, md, txt, csv, json, html. Say briefly what the file contains outside the block.`;
+\`\`\`\`
+Write the file body in Markdown. Supported extensions: pdf, md, txt, csv, json, html. Never leave the block empty. Say briefly what the file contains outside the block.`;
+
+/** Does the message ask for something to download, save or export? */
+function wantsFile(text: string): boolean {
+  return /\b(download(able)?|export|save (it |this )?(as|to)|as an? (pdf|file|document|markdown|csv|json|html)|\.(pdf|md|csv|json|txt|html)\b|pdf\b|markdown file|text file|csv file)/i.test(
+    text
+  );
+}
+
+/** The user's own words from a turn, whether it went out as text or content parts. */
+function turnText(outgoing: string | ContentPart[]): string {
+  if (typeof outgoing === "string") return outgoing;
+  return outgoing
+    .map((p) => (p.type === "text" ? p.text : ""))
+    .join("\n");
+}
 
 const STARTERS = [
   {
@@ -95,8 +118,18 @@ function stripFences(text: string): string {
 }
 
 export default function ChatPage() {
-  const { active, activeId, threads, createThread, selectThread, appendMessage, updateMessage } =
-    useChatStore();
+  const store = useChatStore();
+  const { threads, createThread, selectThread, appendMessage, updateMessage } = store;
+  /**
+   * Inside a split pane the thread is the pane's, not the global selection —
+   * that is what lets two conversations sit side by side. Everything below
+   * reads `activeId`/`active`, so nothing else has to know where it renders.
+   */
+  const pane = usePane();
+  const activeId = pane?.threadId ?? store.activeId;
+  const active = pane?.threadId
+    ? threads.find((t) => t.id === pane.threadId) ?? null
+    : store.active;
   const { mode } = useChatMode();
   const { projects } = useProjects();
 
@@ -122,8 +155,9 @@ export default function ChatPage() {
   // Landing on /chat with no selection opens the most recent thread rather than
   // stranding the user on an empty screen with a populated sidebar.
   useEffect(() => {
+    if (pane) return;
     if (!activeId && threads.length > 0) selectThread(threads[0].id);
-  }, [activeId, threads, selectThread]);
+  }, [pane, activeId, threads, selectThread]);
 
   /**
    * Stream one turn into an existing assistant message.
@@ -155,7 +189,12 @@ export default function ChatPage() {
         {
           model: chosen.value,
           messages: [
-            { role: "system", content: FORMAT_INSTRUCTION },
+            {
+              role: "system",
+              content: wantsFile(turnText(outgoing))
+                ? `${FORMAT_INSTRUCTION}\n${FILE_INSTRUCTION}`
+                : FORMAT_INSTRUCTION,
+            },
             ...(project?.instructions.trim()
               ? [
                   {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,12 +12,19 @@ import {
   Lightbulb,
   Minus,
   Sparkles,
+  TriangleAlert,
   Zap,
 } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
 import { ScoreCard, type ScoreTone } from "@/components/charts/ScoreCard";
-import { getUsageStats } from "@/lib/api";
+import { aiAnalyze, getLastAnalysis, getUsageStats } from "@/lib/api";
+import { useLocalStorage } from "@/hooks/useApi";
+import { Button } from "@/components/ui/Button";
+import { LogoMark } from "@/components/ui/Logo";
+import { StatusDot } from "@/components/ui/Badge";
+import { formatNumber, formatRelativeTime, shortModelName } from "@/lib/format";
+import type { AiAnalysis } from "@/lib/types";
 import { useApi } from "@/hooks/useApi";
 import { deriveScores, type ScoreBreakdown } from "@/lib/analytics";
 import { SKILL_LIBRARY } from "@/lib/catalog/skills";
@@ -70,6 +77,39 @@ export default function AnalyticsPage() {
 
   const report = useMemo(() => deriveScores(data), [data]);
 
+  /**
+   * Re-evaluate sends the period's totals and its odd-looking prompts to a
+   * connected model and keeps the answer per period. Stored in the browser
+   * as well as on the server, so it survives both a reload and a restart.
+   */
+  const [reviews, setReviews] = useLocalStorage<Record<string, AiAnalysis>>("optiai.analytics.reviews", {});
+  const [evaluating, setEvaluating] = useState(false);
+  const [evalError, setEvalError] = useState<string | null>(null);
+  const review = reviews[period] ?? null;
+
+  useEffect(() => {
+    if (reviews[period]) return;
+    void getLastAnalysis(period)
+      .then((last) => {
+        if (last) setReviews((prev) => ({ ...prev, [period]: last }));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
+
+  async function reevaluate() {
+    setEvaluating(true);
+    setEvalError(null);
+    try {
+      const next = await aiAnalyze(period);
+      setReviews((prev) => ({ ...prev, [period]: next }));
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : "Evaluation failed");
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1120px] px-6 py-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -87,14 +127,28 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        <Tabs tabs={PERIODS} active={period} onChange={setPeriod} size="sm" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs tabs={PERIODS} active={period} onChange={setPeriod} size="sm" />
+          <Button
+            size="sm"
+            variant="gradient"
+            loading={evaluating}
+            onClick={() => void reevaluate()}
+            icon={<LogoMark size={12} className="brightness-0 invert" />}
+            title="Send this period's totals and its unusual prompts to a connected model"
+          >
+            {review ? "Re-evaluate" : "Evaluate with OptiAI"}
+          </Button>
+        </div>
       </div>
+
+      {evalError && <ErrorNote message={evalError} className="mb-4" />}
 
       {error && <ErrorNote message={error} className="mb-4" />}
 
       {loading ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-[170px] rounded-2xl" />
             ))}
@@ -117,7 +171,9 @@ export default function AnalyticsPage() {
         />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          {review && <ReviewPanel review={review} />}
+
+          <div className="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-3">
             {report.scores.map((score) => (
               <ScoreCard
                 key={score.id}
@@ -141,7 +197,7 @@ export default function AnalyticsPage() {
               />
             </div>
 
-            <div className="mt-4 grid gap-6 sm:grid-cols-3">
+            <div className="mt-4 grid gap-6 @xl:grid-cols-2 @3xl:grid-cols-3">
               {report.scores.map((score) => {
                 const style = SCORE_STYLE[score.id];
                 return (
@@ -193,7 +249,7 @@ export default function AnalyticsPage() {
             </div>
           </Panel>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 @3xl:grid-cols-2">
             <Panel>
               <Heading
                 icon={<Check className="h-4 w-4" />}
@@ -280,12 +336,111 @@ export default function AnalyticsPage() {
           </Panel>
 
           <p className="px-1 text-[11.5px] leading-relaxed text-[var(--text-subtle)]">
-            Scores are derived deterministically from your recorded usage — no model call is made.
-            When an analytics endpoint exists, it replaces this heuristic and the layout stays.
+            Scores are derived deterministically from your recorded usage. Re-evaluate asks a
+            connected model for its own read of the same numbers plus the prompts that look unusual.
           </p>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What the model said about this period. Sits above the deterministic scores
+ * because it is the newer, opinionated view; the scores below remain the
+ * always-available baseline it was asked to comment on.
+ */
+function ReviewPanel({ review }: { review: AiAnalysis }) {
+  const SEV = {
+    high: "bg-err-50 text-err-700 dark:bg-err-500/12 dark:text-err-500",
+    warn: "bg-warn-50 text-warn-700 dark:bg-warn-500/12 dark:text-warn-500",
+    info: "bg-[var(--brand-soft)] text-[var(--brand)]",
+  } as const;
+  return (
+    <section className="grad-border rounded-2xl bg-[var(--surface)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <LogoMark size={16} />
+          <h2 className="font-display text-[15px] font-bold text-[var(--text)]">OptiAI review</h2>
+        </div>
+        <p className="text-[11.5px] text-[var(--text-subtle)]">
+          {shortModelName(review.model)} · {formatRelativeTime(review.evaluatedAt)}
+        </p>
+      </div>
+
+      {review.summary && (
+        <p className="mt-3 text-[13.5px] leading-relaxed text-[var(--text-muted)]">{review.summary}</p>
+      )}
+
+      {review.scores && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {(
+            [
+              ["Efficiency", review.scores.efficiency, SCORE_STYLE.efficiency.pill],
+              ["Model fit", review.scores.modelFit, SCORE_STYLE["model-fit"].pill],
+              ["Prompt craft", review.scores.promptCraft, SCORE_STYLE["prompt-craft"].pill],
+            ] as const
+          ).map(([label, value, pill]) =>
+            value == null ? null : (
+              <span key={label} className={cx("rounded-md px-2 py-0.5 text-[11px] font-semibold", pill)}>
+                {label} {value}
+              </span>
+            )
+          )}
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-5 @3xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">Findings</p>
+          {review.findings.length === 0 ? (
+            <p className="mt-2 text-[12.5px] text-[var(--text-subtle)]">Nothing to flag.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {review.findings.map((f, i) => (
+                <li key={i} className="flex gap-2.5">
+                  <span className={cx("mt-0.5 h-fit shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase", SEV[f.severity])}>
+                    {f.severity}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-semibold text-[var(--text)]">{f.title}</span>
+                    <span className="block text-[12.5px] leading-relaxed text-[var(--text-muted)]">{f.detail}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
+            <TriangleAlert className="h-3 w-3" /> Prompts worth a look
+          </p>
+          {review.suspicious.length === 0 ? (
+            <p className="mt-2 text-[12.5px] text-[var(--text-subtle)]">No individual prompt stood out.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {review.suspicious.map((p) => (
+                <li key={p.promptId} className="rounded-lg border border-[var(--border)] bg-[var(--surface-sunken)] px-2.5 py-2">
+                  <div className="flex items-center gap-2 text-[11.5px]">
+                    <StatusDot tone={p.status === "ok" ? "ok" : "err"} />
+                    <Link href="/usage" className="min-w-0 flex-1 truncate font-mono text-[var(--text)] hover:underline" title={p.promptId}>
+                      {p.promptId}
+                    </Link>
+                    <span className="shrink-0 tabular-nums text-accent-600 dark:text-accent-400">{formatNumber(p.inputTokens)}↑</span>
+                    <span className="shrink-0 tabular-nums text-ok-600 dark:text-ok-500">{formatNumber(p.outputTokens)}↓</span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-snug text-[var(--text-muted)]">
+                    {p.model && <span className="font-mono text-[11px] text-[var(--text-subtle)]">{shortModelName(p.model)} · </span>}
+                    {p.reason}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

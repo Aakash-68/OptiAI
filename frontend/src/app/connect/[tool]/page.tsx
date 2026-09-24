@@ -6,7 +6,7 @@ import { ArrowLeft, CheckCircle2, RotateCcw, Save, Terminal } from "lucide-react
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Select } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ProviderAvatar } from "@/components/ui/ProviderAvatar";
@@ -135,16 +135,11 @@ export default function ConnectToolPage({ params }: { params: Promise<{ tool: st
           <Field label="API key">
             <Select
               value={selectedKey}
-              onChange={(e) => setSelectedKey(e.target.value)}
+              onChange={setSelectedKey}
               aria-label="API key"
-            >
-              {(keys || []).length === 0 && <option value="">No keys issued yet</option>}
-              {(keys || []).map((key) => (
-                <option key={key.id} value={key.key}>
-                  {key.key}
-                </option>
-              ))}
-            </Select>
+              placeholder="No keys issued yet"
+              options={(keys || []).map((key) => ({ value: key.key, label: key.key }))}
+            />
           </Field>
 
           {Object.keys(envVars).length > 0 && (

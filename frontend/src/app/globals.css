@@ -392,3 +392,193 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Shiny text (React Bits port, CSS-driven — see components/ui/ShinyText.tsx)
+--------------------------------------------------------------------------- */
+
+/*
+ * One linear tween per cycle. Keyframe stops cannot be variables, so the
+ * `delay` prop is folded into the end position instead: the component pushes
+ * --shine-to further off the text so the highlight has left it by `speed`
+ * seconds and the rest of the cycle reads as a hold. The text is the
+ * gradient's clip, so its colour is the gradient's base colour.
+ */
+@keyframes shine-sweep {
+  from {
+    background-position: var(--shine-from);
+  }
+  to {
+    background-position: var(--shine-to);
+  }
+}
+.shiny-text {
+  display: inline-block;
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-position: var(--shine-from);
+  animation-name: shine-sweep;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.shiny-text-hover-pause:hover {
+  animation-play-state: paused;
+}
+.shiny-text-off {
+  animation: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Network map
+--------------------------------------------------------------------------- */
+
+/*
+ * A line being checked: the dash pattern travels from OptiAI outwards along
+ * the blue→violet gradient, so the wait reads as traffic in flight rather
+ * than as a stalled render. Same cadence as the chat's "Thinking" breathing.
+ */
+@keyframes net-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+.net-flow {
+  animation: net-flow 1.1s linear infinite;
+}
+
+/* The verdict halo: blooms once, then fades. */
+@keyframes net-flash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.net-flash {
+  animation: net-flash 1.4s var(--ease-out-soft) both;
+}
+
+@keyframes net-flash-ok {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  35% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-ok-500) 28%, transparent);
+  }
+}
+.net-flash-ok {
+  animation: net-flash-ok 1.4s var(--ease-out-soft) both;
+}
+
+@keyframes net-flash-err {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  35% {
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-err-500) 30%, transparent);
+  }
+}
+.net-flash-err {
+  animation: net-flash-err 1.4s var(--ease-out-soft) both;
+}
+
+/*
+ * Gradient hairline for elements that are already positioned. `.grad-border`
+ * forces `position: relative`, which silently overrode `absolute` on the
+ * map's hub and stretched it across the card — this one only paints.
+ */
+.net-grad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: var(--grad-brand);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Dropdown menus: a brand-tinted scrollbar thumb, as in the reference. */
+.select-menu {
+  scrollbar-color: color-mix(in oklab, var(--brand) 55%, transparent) transparent;
+}
+.select-menu::-webkit-scrollbar {
+  width: 8px;
+}
+.select-menu::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--brand) 55%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* Node and hub while a probe is in flight: the gradient hairline breathes. */
+@keyframes net-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, #6768fb 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in oklab, #6768fb 22%, transparent);
+  }
+}
+.net-node-pulse,
+.net-hub-pulse {
+  animation: net-pulse 1.5s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Split view
+--------------------------------------------------------------------------- */
+
+/* A pane slides in from the right edge; the drop target fades in under the drag. */
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pane-in {
+  animation: pane-in 260ms var(--ease-out-soft) both;
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.drop-in {
+  animation: drop-in 160ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .net-flow,
+  .net-node-pulse,
+  .net-hub-pulse,
+  .net-flash,
+  .net-flash-ok,
+  .net-flash-err,
+  .pane-in,
+  .drop-in {
+    animation: none;
+  }
+}

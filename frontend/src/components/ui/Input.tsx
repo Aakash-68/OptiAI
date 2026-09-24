@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { Search } from "lucide-react";
 import { cx } from "@/lib/format";
 
@@ -72,26 +72,6 @@ export function SearchInput({
         placeholder={placeholder}
         className={cx(FIELD, "h-9.5 pl-9")}
       />
-    </div>
-  );
-}
-
-interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-}
-
-export function Select({ label, className, children, id, ...props }: SelectProps) {
-  const selectId = id || props.name;
-  return (
-    <div className="w-full">
-      {label && (
-        <label htmlFor={selectId} className="mb-1.5 block text-[13px] font-medium text-[var(--text)]">
-          {label}
-        </label>
-      )}
-      <select id={selectId} className={cx(FIELD, "h-9.5 cursor-pointer pr-8", className)} {...props}>
-        {children}
-      </select>
     </div>
   );
 }

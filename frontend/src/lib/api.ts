@@ -23,8 +23,13 @@ import type {
   RecentUsageResponse,
   TestedModelsResponse,
   TraceSummary,
-  UsageChartPoint,
+  UsageChartResponse,
   UsageStats,
+  NetworkCheck,
+  NetworkTopology,
+  AiAnalysis,
+  AiOptifyResult,
+  AiRankResult,
 } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:20180";
@@ -217,7 +222,39 @@ export const getModelTests = (providerId: string) =>
 export const getUsageStats = (period = "today") =>
   request<UsageStats>(`/usage/stats?period=${encodeURIComponent(period)}`);
 export const getUsageChart = (period = "7d") =>
-  request<UsageChartPoint[]>(`/usage/chart?period=${encodeURIComponent(period)}`);
+  request<UsageChartResponse>(`/usage/chart?period=${encodeURIComponent(period)}`);
+
+/* -- OptiAI thinking ------------------------------------------------------- */
+
+/** Rank a candidate list against a sentence — the Models and Skills AI search. */
+export const aiRank = (body: {
+  query: string;
+  candidates: { id: string; name?: string; description?: string }[];
+  limit?: number;
+  context?: string;
+}) => request<AiRankResult>("/ai/rank", { method: "POST", body });
+
+/** Scope a project from its title/description. */
+export const aiOptify = (body: {
+  title: string;
+  description: string;
+  models: { id: string; name?: string; provider?: string; description?: string }[];
+  skills: { id: string; name: string; kind: string; summary?: string }[];
+}) => request<AiOptifyResult>("/ai/optify", { method: "POST", body });
+
+/** A fresh model-written review of a period's usage. */
+export const aiAnalyze = (period: string) =>
+  request<AiAnalysis>("/ai/analyze", { method: "POST", body: { period } });
+export const getLastAnalysis = (period: string) =>
+  request<AiAnalysis | null>(`/ai/analyze?period=${encodeURIComponent(period)}`);
+
+/* -- Network map ----------------------------------------------------------- */
+
+/** Every provider OptiAI can route to right now, with stored health only. */
+export const getNetwork = () => request<NetworkTopology>("/network");
+/** Probe one provider for real — every key, or one completion for no-auth ones. */
+export const checkNetworkProvider = (providerId: string) =>
+  request<NetworkCheck>(`/network/check/${encodeURIComponent(providerId)}`, { method: "POST" });
 /**
  * Returns an envelope, not an array — `estimatedCount` says how many of these
  * rows carry guessed token counts. Typing this as `UsageRecord[]` was why the

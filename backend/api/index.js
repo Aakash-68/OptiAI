@@ -5,6 +5,8 @@ import * as runtime from "../services/runtime.js";
 import * as providers from "../services/providers.js";
 import * as models from "../services/models.js";
 import * as usage from "../services/usage.js";
+import * as network from "../services/network.js";
+import * as ai from "../services/ai.js";
 import * as pricing from "../services/pricing.js";
 import * as optimizer from "../services/optimizer.js";
 import * as cli from "../services/cli.js";
@@ -92,6 +94,18 @@ export function createApiRouter() {
   api.post("/providers/:id/test-models", wrap((req) =>
     models.testProviderModels(req.params.id, req.body?.models)
   ));
+
+  // -- Network map ----------------------------------------------------------
+  // What can be routed to right now, and a live probe of one provider.
+  api.get("/network", wrap(() => network.topology()));
+  api.post("/network/check/:provider", wrap((req) => network.check(req.params.provider)));
+
+  // -- OptiAI thinking ------------------------------------------------------
+  // Each of these runs one completion on the fastest tested model.
+  api.post("/ai/rank", wrap((req) => ai.rank(req.body || {})));
+  api.post("/ai/optify", wrap((req) => ai.optify(req.body || {})));
+  api.post("/ai/analyze", wrap((req) => ai.analyze(req.body || {})));
+  api.get("/ai/analyze", wrap((req) => ai.lastFor(req.query.period || "30d")));
 
   api.get("/usage/stats", wrap((req) => usage.stats(req.query.period || "today")));
   api.get("/usage/chart", wrap((req) => usage.chart(req.query.period || "7d")));

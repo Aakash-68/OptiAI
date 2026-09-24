@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   ExternalLink,
+  Layers,
   Lock,
   Plus,
   RefreshCw,
@@ -22,6 +23,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
 import { ErrorNote, Skeleton } from "@/components/ui/EmptyState";
 import { ConnectDialog } from "@/components/providers/ConnectDialog";
+import { BulkConnectDialog } from "@/components/providers/BulkConnectDialog";
 import { ModelGrid } from "@/components/providers/ModelGrid";
 import {
   deleteConnection,
@@ -48,6 +50,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
   const { data: modelData, loading: loadingModels } = useApi(() => getModels(id), [id]);
 
   const [connectOpen, setConnectOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [customModelId, setCustomModelId] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
@@ -239,13 +242,25 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
                 </span>
                 <p className="text-[13.5px] text-[var(--text-muted)]">No connections yet</p>
               </div>
-              <Button
-                variant="primary"
-                icon={<Plus className="h-4 w-4" />}
-                onClick={() => setConnectOpen(true)}
-              >
-                Add Connection
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="primary"
+                  icon={<Plus className="h-4 w-4" />}
+                  onClick={() => setConnectOpen(true)}
+                >
+                  Add Connection
+                </Button>
+                {provider.authModes.includes("apikey") && (
+                  <Button
+                    variant="secondary"
+                    icon={<Layers className="h-4 w-4" />}
+                    onClick={() => setBulkOpen(true)}
+                    title="Add several API keys from a CSV or by typing them in"
+                  >
+                    Bulk add
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -291,13 +306,25 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
                   </div>
                 );
               })}
-              <Button
-                variant="secondary"
-                icon={<Plus className="h-4 w-4" />}
-                onClick={() => setConnectOpen(true)}
-              >
-                Add another connection
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  icon={<Plus className="h-4 w-4" />}
+                  onClick={() => setConnectOpen(true)}
+                >
+                  Add another connection
+                </Button>
+                {provider.authModes.includes("apikey") && (
+                  <Button
+                    variant="secondary"
+                    icon={<Layers className="h-4 w-4" />}
+                    onClick={() => setBulkOpen(true)}
+                    title="Add several API keys from a CSV or by typing them in"
+                  >
+                    Bulk add
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -365,7 +392,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
 
         <div className="mt-4">
           {loadingModels ? (
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2.5 @xl:grid-cols-2 @4xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-[72px] rounded-xl" />
               ))}
@@ -402,6 +429,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
         provider={provider}
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
+        onConnected={async () => {
+          await refetchConnections();
+          await refetchProviders();
+        }}
+      />
+
+      <BulkConnectDialog
+        provider={provider}
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
         onConnected={async () => {
           await refetchConnections();
           await refetchProviders();

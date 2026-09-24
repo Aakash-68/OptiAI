@@ -206,12 +206,76 @@ export interface UsageBucket {
   lastUsed?: string;
 }
 
-/** GET /api/usage/chart — labels arrive pre-formatted and tokens pre-summed. */
+/**
+ * One bucket of GET /api/usage/chart. `ts` is the bucket start, so the chart
+ * can decide how to label the axis itself (hours inside a day, day boundaries
+ * across several) rather than trusting a pre-formatted string.
+ */
 export interface UsageChartPoint {
+  ts: string;
   label: string;
   /** Prompt + completion, already added together upstream. */
   tokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
   cost?: number;
+  requests?: number;
+}
+
+export interface UsageChartResponse {
+  period: string;
+  /** Width of one bucket in milliseconds — 1h, 3h, 6h or a day. */
+  bucketMs: number;
+  start: string;
+  end: string;
+  points: UsageChartPoint[];
+}
+
+/* -- Network map ----------------------------------------------------------- */
+
+export type NetworkStatus = "ok" | "error" | "unknown";
+
+export interface NetworkConnection {
+  id: string;
+  name: string;
+  authType: string;
+  isActive: boolean;
+  testStatus: string;
+  lastError?: string | null;
+  lastTested?: string | null;
+  lastUsedAt?: string | null;
+}
+
+/** One reachable provider on the map — connected, or needing no credential. */
+export interface NetworkNode {
+  id: string;
+  name: string;
+  noAuth: boolean;
+  /** Stored evidence only; a live check replaces it. */
+  status: NetworkStatus;
+  connections: NetworkConnection[];
+  modelCount: number;
+  testedModels: number;
+  okModels: number;
+  lastTestedAt?: string | null;
+  lastUsedAt?: string | null;
+  recentRequests: number;
+}
+
+export interface NetworkTopology {
+  nodes: NetworkNode[];
+  checkedAt: string;
+}
+
+/** POST /api/network/check/:provider — a live probe of one provider. */
+export interface NetworkCheck {
+  provider: string;
+  ok: boolean;
+  error?: string | null;
+  /** Set for no-auth providers, which prove the route with one real completion. */
+  probedModel?: string;
+  connections: { id: string; name: string; ok: boolean; error?: string | null; latencyMs?: number | null }[];
+  latencyMs: number;
 }
 
 export interface UsageRecord {
@@ -383,3 +447,39 @@ export interface ChatThread {
  *          instead of answering it.
  */
 export type ChatMode = "chat" | "ask";
+
+/* -- OptiAI thinking ------------------------------------------------------- */
+
+export interface AiRankResult {
+  model: string;
+  modelName?: string;
+  results: { id: string; reason: string }[];
+}
+
+export interface AiOptifyResult {
+  model: string;
+  modelName?: string;
+  models: string[];
+  skills: string[];
+  plugins: string[];
+  reason: string;
+}
+
+export interface AiAnalysis {
+  period: string;
+  model: string;
+  modelName?: string;
+  evaluatedAt: string;
+  summary: string;
+  findings: { title: string; detail: string; severity: "info" | "warn" | "high" }[];
+  suspicious: {
+    promptId: string;
+    reason: string;
+    model?: string | null;
+    inputTokens: number;
+    outputTokens: number;
+    status: string;
+    why: string;
+  }[];
+  scores: { efficiency: number | null; modelFit: number | null; promptCraft: number | null } | null;
+}

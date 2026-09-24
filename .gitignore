@@ -14,3 +14,7 @@ backend/.data/
 .next/
 out/
 *.log
+
+# Generated knowledge graph (rebuilt with `graphify update .`) — 8 MB of
+# derived data, including a cache keyed to this machine.
+graphify-out/

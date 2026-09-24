@@ -6,7 +6,11 @@ import { AiSearchBar } from "@/components/ui/AiSearchBar";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { ProviderLogo } from "@/components/ui/ProviderLogo";
+import { LogoMark } from "@/components/ui/Logo";
+import { aiRank } from "@/lib/api";
+import { shortModelName } from "@/lib/format";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
 import {
@@ -36,6 +40,8 @@ export default function ModelsPage() {
   const [capability, setCapability] = useState("all");
   const [connectedOnly, setConnectedOnly] = useState(false);
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  const [aiPicks, setAiPicks] = useState<{ id: string; reason: string }[] | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,6 +58,12 @@ export default function ModelsPage() {
   const filtered = useMemo(() => {
     let list = models;
 
+    // An AI answer narrows the table to its picks, in the order it gave them.
+    if (aiPicks) {
+      const order = new Map(aiPicks.map((p, i) => [p.id, i]));
+      list = list.filter((m) => order.has(m.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    }
+
     if (query.trim()) {
       const q = query.toLowerCase();
       list = list.filter(
@@ -67,16 +79,47 @@ export default function ModelsPage() {
     if (connectedOnly) list = list.filter((m) => m.connected);
 
     return list.slice(0, 300);
-  }, [models, query, providerFilter, capability, connectedOnly]);
+  }, [models, query, providerFilter, capability, connectedOnly, aiPicks]);
 
-  function handleAiSearch(q: string) {
-    // The routing model that will answer this does not exist yet. Rather than
-    // fake a recommendation, state what it will do and fall back to filtering.
-    setQuery(q.split(" ").slice(-2).join(" "));
-    setAiAnswer(
-      `AI model search is not wired to a model yet — OptiAI needs a connected provider to reason about "${q}". ` +
-        `Filtering the catalog on the closest keywords in the meantime.`
-    );
+  /**
+   * OptiAI search: the catalog — every model's id, name, provider, tags and
+   * price band — goes to the fastest tested model, which returns its top five
+   * with a reason each. The table narrows to those, in that order.
+   */
+  async function handleAiSearch(q: string) {
+    setAiBusy(true);
+    setAiAnswer(null);
+    setAiPicks(null);
+    try {
+      const candidates = models.map((m) => {
+        const facts = factsFor(m.id, m.name);
+        const price =
+          m.inputPrice != null && m.outputPrice != null
+            ? `$${m.inputPrice}/$${m.outputPrice} per 1M`
+            : "price unknown";
+        return {
+          id: m.id,
+          name: `${m.name || m.id} (${m.providerName}${m.connected ? ", connected" : ""})`,
+          description: `${facts.tags.join(", ")}; ${price}`,
+        };
+      });
+      const out = await aiRank({
+        query: q,
+        candidates,
+        limit: 5,
+        context: "Prefer models marked connected when they fit, since only those can be used right away.",
+      });
+      if (out.results.length === 0) {
+        setAiAnswer(`${shortModelName(out.model)} could not pick anything for “${q}”. Try describing the task and the budget.`);
+      } else {
+        setAiPicks(out.results);
+        setAiAnswer(`Top ${out.results.length} for “${q}”, chosen by ${shortModelName(out.model)}.`);
+      }
+    } catch (err) {
+      setAiAnswer(err instanceof Error ? err.message : "OptiAI search failed");
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   return (
@@ -107,14 +150,61 @@ export default function ModelsPage() {
         <AiSearchBar
           aiPlaceholder="Describe what you need — “a cheap model for coding a React app”"
           searchPlaceholder="Search models by name, use case or tags…"
-          onAiSubmit={handleAiSearch}
-          onQueryChange={setQuery}
+          onAiSubmit={(q) => void handleAiSearch(q)}
+          onQueryChange={(q) => {
+            setQuery(q);
+            if (aiPicks) {
+              setAiPicks(null);
+              setAiAnswer(null);
+            }
+          }}
           suggestions={AI_SUGGESTIONS}
+          busy={aiBusy}
         />
-        {aiAnswer && (
-          <p className="mt-3 rounded-lg border border-[var(--brand-soft-border)] bg-[var(--brand-soft)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
-            {aiAnswer}
-          </p>
+        {(aiAnswer || aiBusy) && (
+          <div className="mt-3 rounded-xl border border-[var(--brand-soft-border)] bg-[var(--brand-soft)] px-3.5 py-2.5">
+            <div className="flex items-center gap-2">
+              <LogoMark size={12} className={aiBusy ? "think-pulse" : undefined} />
+              <p className="flex-1 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
+                {aiBusy ? "OptiAI is reading the catalog…" : aiAnswer}
+              </p>
+              {aiPicks && (
+                <button
+                  onClick={() => {
+                    setAiPicks(null);
+                    setAiAnswer(null);
+                  }}
+                  className="text-[12px] font-semibold text-[var(--brand)] hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {aiPicks && (
+              <ol className="mt-2.5 space-y-1.5">
+                {aiPicks.map((p, i) => {
+                  const m = models.find((x) => x.id === p.id);
+                  return (
+                    <li key={p.id} className="flex items-start gap-2.5 rounded-lg bg-[var(--surface)] px-2.5 py-2">
+                      <span className="w-4 shrink-0 text-center text-[11px] font-semibold tabular-nums text-[var(--brand)]">
+                        {i + 1}
+                      </span>
+                      {m && <ProviderLogo id={m.providerId} name={m.providerName} size="sm" className="!h-5 !w-5 !rounded-md" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-[var(--text)]">
+                          {m?.name || p.id}
+                          {m && !m.connected && (
+                            <span className="ml-1.5 text-[10.5px] font-normal text-[var(--text-subtle)]">not connected</span>
+                          )}
+                        </span>
+                        <span className="block text-[12px] leading-snug text-[var(--text-muted)]">{p.reason}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
         )}
       </div>
 
@@ -136,33 +226,29 @@ export default function ModelsPage() {
           <div className="mb-4 flex flex-wrap items-center gap-2.5">
             <Select
               value={providerFilter}
-              onChange={(e) => {
-                setProviderFilter(e.target.value);
-                if (e.target.value !== "all") void loadProvider(e.target.value);
+              onChange={(v) => {
+                setProviderFilter(v);
+                if (v !== "all") void loadProvider(v);
               }}
-              className="w-auto"
+              className="w-auto min-w-[190px]"
               aria-label="Provider"
-            >
-              <option value="all">All providers</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.modelCount})
-                </option>
-              ))}
-            </Select>
+              options={[
+                { value: "all", label: "All providers" },
+                ...providers.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                  hint: String(p.modelCount),
+                  icon: <ProviderLogo id={p.id} name={p.name} size="sm" className="!h-5 !w-5 !rounded-md" />,
+                })),
+              ]}
+            />
             <Select
               value={capability}
-              onChange={(e) => setCapability(e.target.value)}
-              className="w-auto"
+              onChange={setCapability}
+              className="w-auto min-w-[170px]"
               aria-label="Capability"
-            >
-              <option value="all">Any capability</option>
-              {MODEL_TAGS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
+              options={[{ value: "all", label: "Any capability" }, ...MODEL_TAGS.map((c) => ({ value: c, label: c }))]}
+            />
             <button
               onClick={() => setConnectedOnly((v) => !v)}
               className={cx(

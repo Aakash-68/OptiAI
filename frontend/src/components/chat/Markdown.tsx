@@ -261,6 +261,32 @@ const REHYPE_PLUGINS = [[rehypeHighlight, { plainText: ["file", "txt", "text", "
  * re-parsed on every delta, which is fine at chat sizes — an unclosed fence
  * simply renders as an open code block until the closing line arrives.
  */
+/**
+ * A file block opened with three backticks is closed by the first three-
+ * backtick line inside it — so a document that contains its own code blocks
+ * ends after its first snippet and the rest spills out as prose. The model
+ * is asked for four backticks; when it uses three anyway and there are more
+ * fences after the opener, this widens the opener and the LAST fence in the
+ * message to four so the whole document stays inside the card.
+ */
+function promoteFileFence(content: string): string {
+  const open = /^```file\b[^\n]*$/m.exec(content);
+  if (!open) return content;
+  const after = content.slice(open.index + open[0].length);
+  const fences = [...after.matchAll(/^```[^\n]*$/gm)];
+  // One closer: the normal case, nothing to repair.
+  if (fences.length < 2) return content;
+  const last = fences[fences.length - 1];
+  const lastAt = open.index + open[0].length + last.index;
+  return (
+    content.slice(0, open.index) +
+    "`" + open[0] +
+    content.slice(open.index + open[0].length, lastAt) +
+    "````" +
+    content.slice(lastAt + last[0].length)
+  );
+}
+
 export const Markdown = memo(function Markdown({
   content,
   streaming,
@@ -273,6 +299,7 @@ export const Markdown = memo(function Markdown({
   /** Inside a file card preview: no file cards within file cards. */
   nested?: boolean;
 }) {
+  const source = useMemo(() => (nested ? content : promoteFileFence(content)), [content, nested]);
   return (
     <div className="md-prose">
       <ReactMarkdown
@@ -289,6 +316,17 @@ export const Markdown = memo(function Markdown({
 
             if (language === "file" && !nested) {
               const filename = props.node?.data?.meta?.trim() || "download.txt";
+              // The model opened a file block and put nothing in it. A dead
+              // card with a 0 B download is worse than no card: say so in a
+              // line and let the rest of the answer stand on its own.
+              if (!streaming && !code.trim()) {
+                return (
+                  <p className="my-2 rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-2 text-[12.5px] text-[var(--text-subtle)]">
+                    The model opened a file block for <span className="font-mono">{filename}</span> but left it
+                    empty. Ask again and name the format — “as a .md file” — or use Download on the message.
+                  </p>
+                );
+              }
               return <FileCard filename={filename} content={code} streaming={streaming} model={model} />;
             }
             return (
@@ -306,7 +344,7 @@ export const Markdown = memo(function Markdown({
           },
         }}
       >
-        {content}
+        {source}
       </ReactMarkdown>
     </div>
   );

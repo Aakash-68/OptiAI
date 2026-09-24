@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Folder, MessageSquare, Pin, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import { LogoMark } from "@/components/ui/Logo";
+import { aiOptify } from "@/lib/api";
+import { useModelCatalog } from "@/hooks/useModelCatalog";
+import { SKILL_LIBRARY } from "@/lib/catalog/skills";
+import { shortModelName } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -40,6 +45,41 @@ export default function ProjectsPage() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
+  const catalog = useModelCatalog();
+  const [optifying, setOptifying] = useState(false);
+  const [optifyNote, setOptifyNote] = useState<string | null>(null);
+
+  /**
+   * OptiFy: the title and description go to a connected model along with
+   * the connected catalog and the skill library, and it picks the scope.
+   * Applies straight into the picker so the choice can still be edited.
+   */
+  async function optify(
+    title: string,
+    description: string,
+    apply: (patch: { models: string[]; skills: string[]; plugins: string[] }) => void
+  ) {
+    setOptifying(true);
+    setOptifyNote(null);
+    try {
+      const out = await aiOptify({
+        title,
+        description,
+        models: catalog.models
+          .filter((m) => m.connected)
+          .map((m) => ({ id: m.id, name: m.name, provider: m.providerName })),
+        skills: SKILL_LIBRARY.map((s) => ({ id: s.id, name: s.name, kind: s.kind, summary: s.summary })),
+      });
+      apply({ models: out.models, skills: out.skills, plugins: out.plugins });
+      setOptifyNote(
+        `${shortModelName(out.model)} picked ${out.models.length} model${out.models.length === 1 ? "" : "s"}, ${out.skills.length} skill${out.skills.length === 1 ? "" : "s"} and ${out.plugins.length} plugin${out.plugins.length === 1 ? "" : "s"}.${out.reason ? ` ${out.reason}` : ""}`
+      );
+    } catch (err) {
+      setOptifyNote(err instanceof Error ? err.message : "OptiFy failed");
+    } finally {
+      setOptifying(false);
+    }
+  }
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -61,6 +101,7 @@ export default function ProjectsPage() {
 
   function openCreate() {
     setDraft(EMPTY_DRAFT);
+    setOptifyNote(null);
     setCreateOpen(true);
   }
 
@@ -244,6 +285,16 @@ export default function ProjectsPage() {
               plugins={draft.plugins}
               onChange={(patch) => setDraft({ ...draft, ...patch })}
             />
+            <OptifyRow
+              busy={optifying}
+              note={optifyNote}
+              disabled={!draft.name.trim() && !draft.description.trim()}
+              onClick={() =>
+                void optify(draft.name, draft.description, (patch) =>
+                  setDraft((d) => ({ ...d, ...patch }))
+                )
+              }
+            />
           </div>
         </div>
       </Modal>
@@ -291,10 +342,60 @@ export default function ProjectsPage() {
                   setEditing({ ...editing, ...patch });
                 }}
               />
+              <OptifyRow
+                busy={optifying}
+                note={optifyNote}
+                disabled={!editing.name.trim() && !editing.description.trim()}
+                onClick={() =>
+                  void optify(editing.name, editing.description, (patch) => {
+                    updateProject(editing.id, patch);
+                    setEditing((e) => (e ? { ...e, ...patch } : e));
+                  })
+                }
+              />
             </div>
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/** The OptiFy control under the scope picker, with the model's note beneath. */
+function OptifyRow({
+  busy,
+  note,
+  disabled,
+  onClick,
+}: {
+  busy: boolean;
+  note: string | null;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className="mt-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Button
+          size="sm"
+          variant="gradient"
+          loading={busy}
+          disabled={disabled}
+          onClick={onClick}
+          icon={<LogoMark size={12} className="brightness-0 invert" />}
+          title={disabled ? "Give the project a name or description first" : "Let OptiAI pick models, skills and plugins from the description"}
+        >
+          OptiFy
+        </Button>
+        <span className="text-[11.5px] text-[var(--text-subtle)]">
+          Pick the scope from the name and description. You can still edit it.
+        </span>
+      </div>
+      {note && (
+        <p className="mt-2 rounded-lg border border-[var(--brand-soft-border)] bg-[var(--brand-soft)] px-3 py-2 text-[12px] leading-relaxed text-[var(--text-muted)]">
+          {note}
+        </p>
+      )}
     </div>
   );
 }

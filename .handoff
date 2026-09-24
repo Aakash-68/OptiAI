@@ -1,0 +1,241 @@
+# OptiAI — handoff
+
+Written for the next engineer (or agent) picking this up cold.
+State as of 2026-09-23. Nothing has been pushed to GitHub yet — see **Blocked** below.
+
+---
+
+## What it is
+
+One local gateway in front of every AI provider. You point your CLI tools
+(Claude Code, Codex, Cursor, Cline…) at OptiAI instead of at a provider, and it
+routes, prices and records every request. There is also a web UI for chatting,
+comparing models and reading your usage back.
+
+## Stack
+
+| Part | What |
+|---|---|
+| `frontend/` | Next.js 16 (Turbopack), React 19, Tailwind v4. Port **20181** |
+| `backend/` | Express. Port **20180**. Thin service layer over a vendored router |
+| `backend/9router/` | **Vendored third-party router.** Provider executors, OAuth, credential rotation, SSE. Treat as upstream — patch sparingly and comment why |
+| Storage | SQLite at `backend/.data/` — also holds provider OAuth tokens and API keys in readable form. Gitignored; do not copy between machines |
+
+```bash
+npm run app        # both, concurrently
+npm run backend    # just the API
+npm run frontend   # just the UI
+```
+
+Two endpoint families:
+
+- `/api/*` — the web UI's own API (traced, typed, OptiAI-shaped)
+- `/v1/chat/completions`, `/v1/messages`, `/v1/responses` — raw OpenAI/Anthropic-compatible gateway for real CLI tools. Auth enforced: `Authorization: Bearer <key>` from Connect, 401 without
+
+Both funnel into the same `routeChat`, so behaviour cannot drift between them.
+
+---
+
+## Blocked right now
+
+**The initial commit has never pushed.** GitHub push protection rejects it over
+four Google OAuth client ID/secret pairs inside the vendored router
+(`providers/registry/gemini.js`, `gemini-cli.js`, `antigravity.js`,
+`providers/shared.js`).
+
+They are **not our secrets**. They are Google *installed-application* clients
+that ship inside Gemini CLI and Antigravity — extractable from any install, and
+under RFC 8252 a native-app client secret is not confidential. The vendored code
+labels them `public CLI client` itself.
+
+Decision taken: allowlist them through GitHub's unblock URLs rather than strip
+them, so Gemini/Antigravity keep working with no configuration. Those URLs are
+in the rejected-push output and expire, so a fresh push may be needed to
+regenerate them.
+
+Audited before publishing: `backend/.data/` is untracked, no gateway key, no
+private keys, no provider API keys in tracked files. The only other
+credential-shaped values are Windsurf/Codeium **Firebase web keys**, which are
+public by design and which GitHub does not flag.
+
+Unresolved and worth a look: this repo vendors 9Router's source. Check its
+licence permits redistribution and that attribution is where it needs to be.
+
+---
+
+## Known issues
+
+1. **`data: [DONE]` is appended to non-streaming `/v1` responses.** Valid JSON
+   followed by an SSE terminator. Affects *every* model, not just combos — a
+   strict OpenAI client will fail to parse. Pre-existing, lives in the vendored
+   router, not yet fixed.
+2. **NVIDIA 404s intermittently.** The model id is valid (it is in NVIDIA's own
+   `/v1/models`), and three consecutive calls succeeded. The router reads the
+   404 as a rate-limit signal and opens a ~1 minute breaker, during which
+   everything fails instantly — a CLI retrying inside that window is guaranteed
+   to fail. Give combos a second model so one breaker cannot take the whole
+   combo down.
+3. **`z-ai/glm-5.3` fails across all three NVIDIA keys.** Fallback is on by
+   default for any error, so all three were tried. Either the id is wrong for
+   this provider or no key has access.
+4. **Image attachments are unverified end-to-end.** The router has no
+   multimodal code; it forwards the OpenAI `image_url` content array as-is.
+   Should work on OpenAI-compatible providers, never proven — no vision model
+   is connected.
+5. **Tool calling through the router is untested.**
+6. **Pricing and capabilities are curated, not reported.** The catalog returns
+   only `id`, `name`, `provider` for all 105 models. Rates and capability badges
+   come from `frontend/src/lib/catalog/modelFacts.ts`, matched by id pattern,
+   first match wins. Unknown rates render an em dash, never `$0.00` — on a cost
+   tool "free" and "unknown" must not look alike. That file is the one place to
+   correct a rate.
+
+---
+
+## Gotchas found the hard way
+
+Each of these cost real debugging time. They are not obvious from the code.
+
+**Tailwind: a default class plus a caller override is a coin flip.** A component
+with `h-6` in its base classes that appends `className` gets `h-6 … h-5` on one
+element, and CSS resolves that by **stylesheet order, not attribute order** — so
+the caller silently loses. `Wordmark` takes a numeric `height` prop for exactly
+this reason. Do not "fix" it back to a class.
+
+**`border-beam` sets `overflow: hidden` on its root, always** — not only while
+animating. Anything that escapes its bounds gets clipped. The model picker
+dropdown is portalled to `document.body` with measured fixed coordinates
+because of this. Portalled menus are not DOM descendants of their trigger, so
+click-outside must check the menu too.
+
+**`next/image` 400s on SVG** (`"url" parameter is valid but image type is not
+allowed`) unless `unoptimized` is set. A build passing proves nothing here —
+images resolve at runtime.
+
+**A sticky element cannot be centred with `left-1/2`.** `left` only constrains
+sticky during horizontal scroll. Use a sticky wrapper that does the centring.
+
+**`useMemo` is not for side effects.** React may skip or re-run it at will.
+Re-seeding dialog state in a memo meant edits landed only when something else
+forced a render.
+
+**Holding a captured object goes stale.** A page that stores `editing = combo`
+keeps showing the old one after anything else edits it. Store the id, derive
+the object from the live list.
+
+**Combo names are case-sensitive and may not contain a slash.** Lookup is
+`WHERE name = ?` with no `COLLATE NOCASE`; a name with a slash is parsed as
+`provider/model` and never reaches the combo lookup. Both rules are enforced
+server-side.
+
+**`localhost` and `127.0.0.1` are the same endpoint** and compare unequal as
+strings. CLI "Configured" detection normalises loopback spellings — without
+that, a correctly configured tool reads as not configured.
+
+**`CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists.** A
+new column needs its own `ALTER TABLE`, guarded, in `services/store.js`.
+
+---
+
+## Where things live
+
+| Concern | File |
+|---|---|
+| Model rates, tags, capabilities | `frontend/src/lib/catalog/modelFacts.ts` |
+| Attachments, long-paste → file, content blocks | `frontend/src/lib/attachments.ts` |
+| Per-thread streaming (several chats at once) | `frontend/src/hooks/useStreams.tsx` |
+| Follow-the-stream scrolling | `frontend/src/hooks/useStickToBottom.ts` |
+| Combo CRUD + name rules | `backend/services/models.js` |
+| Test verdicts, winning API key | `backend/services/modelTests.js` |
+| Per-request tracing (both paths) | `backend/services/trace.js`, `backend/api/index.js` |
+| CLI config detection (read-only) | `backend/services/cli.js` |
+| Schema + migrations | `backend/services/store.js` |
+
+Combos are **server-side**: the router resolves a combo by name from the
+database, so a browser-only combo can never route. That is why CRUD is wired at
+`/api/models/combos`.
+
+Model test verdicts are filed under the key that **answered**, not the one you
+clicked Test on — the router falls through keys on failure and stops at the
+first success, so those differ whenever a provider has several keys.
+
+---
+
+## Conventions
+
+- Semantic CSS variables (`var(--text)`, `var(--surface)`), never raw hex in components
+- The logo gradient is `--grad-logo`; `--grad-brand` is the lighter variant for sitting behind UI text
+- `frontend/AGENTS.md` carries a warning that this Next.js version differs from training data — read `node_modules/next/dist/docs/` before assuming an API
+- Comments explain *why*, especially where something looks wrong but is deliberate
+
+## Verifying a change
+
+`npm run build` passing is necessary and not sufficient. Several real bugs this
+session compiled cleanly and failed at runtime. Start both servers and exercise
+the actual path — the SVG 400, the dropdown clipping and the `localhost` vs
+`127.0.0.1` mismatch all built fine.
+
+---
+
+## Added 2026-09-23 (network map, time-bucketed chart, split view)
+
+**Network map on Usage → Overview.** `backend/services/network.js` exposes
+`GET /api/network` (every provider that has a connection or needs none, with
+stored health) and `POST /api/network/check/:provider` (live probe: every
+active key through the router's own connection test, or one 1-token
+completion for a no-auth provider — that one *writes* a model-test verdict).
+`frontend/src/components/network/ProviderTopology.tsx` draws OptiAI in the
+middle and probes every node on mount, staggered 350 ms apart; lines run the
+blue→violet gradient while in flight and settle green/red. Clicking a node
+shows passing models (with the key that answered), keys, and recent prompts.
+`RequestsRail.tsx` beside it is the compact prompt log, fed by `/usage/traces`.
+
+**Chart.** `GET /api/usage/chart` now returns `{ period, bucketMs, points[] }`
+with a `ts` per bucket, computed in `services/usage.js` from `usageHistory`
+(the vendored `getChartData` is kept as `chartLegacy`). The UI used to send
+`"1d"` for Today, which the vendored function did not know and treated as 60
+days. Buckets: 1 h for today/24h, 3 h up to 3 days, 6 h up to 14, else 1 day.
+`AreaChart` lays the x-axis out by time: hours inside a day, dated midnights
+with hour marks between them across a week, dates only beyond that.
+
+**Split view.** `hooks/useSplitView.tsx` holds the pane target
+(`{kind:"route",href}` or `{kind:"thread",threadId}`) and the width ratio in
+localStorage. Sidebar rows and chats are HTML5-draggable; `AppShell` shows a
+two-zone drop target while a drag is in progress (left = open in main, right =
+open beside). `components/layout/SplitPane.tsx` renders the page component
+directly via `PaneRouter.tsx` — it is not a second Next router, so dynamic
+routes (`/providers/[id]`, `/connect/[tool]`) navigate the main column when
+clicked inside a pane. Chat reads `usePane()` for its thread id so two
+conversations can sit side by side; the global selection is untouched.
+Close is the round X at the pane's bottom right; the divider drags and
+double-clicks back to 50/50.
+
+### Same day, second pass
+
+**OptiAI thinks with a model now.** `backend/services/ai.js` picks the fastest
+model that last tested clean and runs one completion through `routeChatJson`.
+Three routes: `POST /api/ai/rank` (Models and Skills AI search — the page
+sends its candidate list, gets top 5 ids with reasons), `POST /api/ai/optify`
+(Projects "OptiFy" — title/description in, model/skill/plugin ids out) and
+`POST /api/ai/analyze` (Analytics "Re-evaluate" — totals plus the unusual
+prompts in, summary/findings/suspicious prompts out; last result cached per
+period in memory and in the browser). Reasoning models spend the token budget
+thinking before the JSON, so budgets are 2.5–4k and `parseLoose` repairs a
+reply cut off mid-string rather than failing. `[DONE]` suffix handled there too.
+
+**Layout is container-driven.** `<main>` and the split pane's scroller are
+`@container`; pages use `@2xl:`/`@3xl:`/`@5xl:` grid variants instead of
+viewport breakpoints, so a page in a half-width pane stacks the way a narrow
+window would. Est. cost tile shows two decimals under `@5xl`.
+
+**Network map drills in.** Click a provider: it becomes the hub and its tested
+models are the ring (green passed, red failed). Back arrow returns. Topology
+re-reads every 20 s; the request rail every 15 s; the Usage header Refresh
+button re-reads everything and re-probes. Hub used `.grad-border`, which sets
+`position: relative` and overrode `absolute` — `.net-grad` paints only.
+
+**UI.** `components/ui/Select.tsx` replaces the native select everywhere
+(portalled menu, brand scrollbar). Modal's red light is the close control.
+ModelGrid: a failed test only reddens the border; selection stays independent.
+Analytics gauge is a 240° arc sized by CSS. `BulkConnectDialog` adds many API
+keys to one provider from CSV/paste or typed rows, one request per key.

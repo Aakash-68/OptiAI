@@ -7,18 +7,13 @@ import type { Model, ModelTestResult } from "@/lib/types";
 export type ModelState = "selected" | "idle" | "failed";
 
 /**
- * Model grid with three-state selection.
+ * Model grid.
  *
- * Clicking a model toggles it on or off — there is no separate switch, the tile
- * itself is the control:
- *
- *   selected  green border + check
- *   idle      grey border
- *   failed    red border + the upstream error on hover
- *
- * A failed tile stays selected. The test result describes the model's health,
- * not the user's intent, so a transient upstream 429 must not silently
- * deactivate a model the user chose.
+ * Clicking a model toggles it on or off — the tile itself is the control.
+ * A test verdict is drawn separately from the selection: a failed model keeps
+ * its checkbox and its toggle, and only its border turns red. Locking the
+ * tile on failure made a transient upstream 429 look like a decision the
+ * user had made, and hid whether the model was still selected at all.
  */
 export function ModelGrid({
   models,
@@ -34,7 +29,7 @@ export function ModelGrid({
   onToggle: (modelId: string) => void;
 }) {
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-2.5 @xl:grid-cols-2 @4xl:grid-cols-3">
       {models.map((model) => {
         const isSelected = selected.includes(model.id);
         const result = results[model.id];
@@ -51,27 +46,24 @@ export function ModelGrid({
             className={cx(
               "group relative flex items-start gap-2.5 rounded-xl border-2 px-3 py-2.5 text-left transition-all duration-150",
               isFailed
-                ? "border-err-500/60 bg-err-50/50 dark:bg-err-500/8"
+                ? "border-err-500/50 hover:border-err-500/80"
                 : isSelected
-                  ? "border-ok-500/70 bg-ok-50/50 dark:bg-ok-500/8"
-                  : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]"
+                  ? "border-ok-500/70"
+                  : "border-[var(--border)] hover:border-[var(--border-strong)]",
+              isSelected && !isFailed ? "bg-ok-50/50 dark:bg-ok-500/8" : "bg-[var(--surface)]"
             )}
           >
             <span
               className={cx(
                 "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[5px] border-2 transition-colors",
-                isFailed
-                  ? "border-err-500 bg-err-500 text-white"
-                  : isSelected
-                    ? "border-ok-500 bg-ok-500 text-white"
-                    : "border-[var(--border-strong)]"
+                isSelected
+                  ? isFailed
+                    ? "border-err-500 bg-err-500 text-white"
+                    : "border-ok-500 bg-ok-500 text-white"
+                  : "border-[var(--border-strong)]"
               )}
             >
-              {isFailed ? (
-                <AlertCircle className="h-3 w-3" />
-              ) : isSelected ? (
-                <Check className="h-3 w-3" strokeWidth={3} />
-              ) : null}
+              {isSelected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
             </span>
 
             <span className="min-w-0 flex-1">

@@ -10,14 +10,15 @@ import {
   Plus,
   Search,
   Trash2,
-  Wrench,
   X,
 } from "lucide-react";
 import { NAV_ITEMS, TOOL_ITEMS, TOP_ITEMS, type NavItem } from "@/lib/nav";
 import { cx } from "@/lib/format";
 import { useChatStore } from "@/hooks/useChatStore";
 import { useStreams } from "@/hooks/useStreams";
-import { Wordmark } from "@/components/ui/Logo";
+import { useSplitView } from "@/hooks/useSplitView";
+import { LogoMark, Wordmark } from "@/components/ui/Logo";
+import { ShinyText } from "@/components/ui/ShinyText";
 
 const ROW =
   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] font-medium " +
@@ -47,6 +48,9 @@ export function Sidebar({
   const router = useRouter();
   const { threads, activeId, selectThread, createThread, deleteThread } = useChatStore();
   const { isStreaming } = useStreams();
+  // Every row here can be picked up and dropped on the content area to open
+  // it beside the current page — see AppShell for the landing side.
+  const { dragHandlers } = useSplitView();
 
   const isTool = TOOL_ITEMS.some((i) => pathname.startsWith(i.href));
   const [toolsOpen, setToolsOpen] = useState(isTool);
@@ -97,6 +101,7 @@ export function Sidebar({
               key={item.href}
               href={item.href}
               title={item.label}
+              {...dragHandlers({ kind: "route", href: item.href, label: item.label })}
               className={cx(
                 "grid h-9 w-9 place-items-center rounded-lg transition-colors active:scale-[0.96]",
                 active
@@ -162,7 +167,7 @@ export function Sidebar({
       <div className="shrink-0 px-2.5">
         <ul className="space-y-0.5">
           {TOP_ITEMS.slice(0, 2).map((item) => (
-            <NavRow key={item.href} item={item} pathname={pathname} />
+            <NavRow key={item.href} item={item} pathname={pathname} drag={dragHandlers} />
           ))}
 
           <li>
@@ -174,8 +179,19 @@ export function Sidebar({
                 "text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
               )}
             >
-              <Wrench className="h-4.5 w-4.5 shrink-0" />
-              <span className="flex-1 text-left">OptiAI tools</span>
+              {/* The mark, not a wrench: this group is OptiAI itself. */}
+              <LogoMark size={13} className="shrink-0" />
+              <span className="flex-1 text-left">
+                <ShinyText
+                  text="OptiAI tools"
+                  speed={2.7}
+                  delay={1.2}
+                  color="var(--text-muted)"
+                  shineColor="#9863f4"
+                  spread={145}
+                  pauseOnHover
+                />
+              </span>
               <ChevronRight
                 className={cx(
                   "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out",
@@ -187,11 +203,11 @@ export function Sidebar({
 
           {toolsOpen &&
             TOOL_ITEMS.map((item) => (
-              <NavRow key={item.href} item={item} pathname={pathname} indent />
+              <NavRow key={item.href} item={item} pathname={pathname} indent drag={dragHandlers} />
             ))}
 
           {TOP_ITEMS.slice(2).map((item) => (
-            <NavRow key={item.href} item={item} pathname={pathname} />
+            <NavRow key={item.href} item={item} pathname={pathname} drag={dragHandlers} />
           ))}
         </ul>
 
@@ -234,6 +250,7 @@ export function Sidebar({
                     selectThread(thread.id);
                     router.push("/chat");
                   }}
+                  {...dragHandlers({ kind: "thread", threadId: thread.id, title: thread.title })}
                   className={cx(
                     "w-full truncate rounded-lg py-[7px] pl-2.5 pr-7 text-left text-[13px] transition-colors active:scale-[0.985]",
                     activeId === thread.id
@@ -275,10 +292,12 @@ function NavRow({
   item,
   pathname,
   indent,
+  drag,
 }: {
   item: NavItem;
   pathname: string;
   indent?: boolean;
+  drag?: ReturnType<typeof useSplitView>["dragHandlers"];
 }) {
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const Icon = item.icon;
@@ -286,6 +305,7 @@ function NavRow({
     <li>
       <Link
         href={item.href}
+        {...(drag ? drag({ kind: "route", href: item.href, label: item.label }) : {})}
         className={cx(
           ROW,
           indent && "pl-7",

@@ -6,6 +6,88 @@ import { compactNumber, formatCost } from "@/lib/format";
 export interface SeriesPoint {
   label: string;
   value: number;
+  /** Bucket start. When present the axis is laid out by time, not by index. */
+  ts?: number;
+}
+
+interface Tick {
+  index: number;
+  label: string;
+  /** Day boundaries are drawn stronger than the hour marks between them. */
+  major: boolean;
+}
+
+const HOUR = 3600000;
+const DAY = 24 * HOUR;
+
+const dayLabel = (ts: number) =>
+  new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const hourLabel = (ts: number) =>
+  new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+function isMidnight(ts: number) {
+  const d = new Date(ts);
+  return d.getHours() === 0 && d.getMinutes() === 0;
+}
+
+/**
+ * Chooses which buckets get an axis label.
+ *
+ * Inside one day the axis is hours. Across a few days each midnight is a
+ * major tick carrying the date, with two or three hour marks between them
+ * so a spike can still be placed within a day. Once the span is a couple of
+ * weeks the intermediate marks stop earning their space and only dates
+ * remain, thinned so they never collide.
+ */
+function timeTicks(points: SeriesPoint[]): Tick[] {
+  const stamped = points.every((p) => typeof p.ts === "number");
+  if (!stamped || points.length < 2) {
+    const step = Math.max(1, Math.ceil(points.length / 8));
+    return points
+      .map((p, i) => ({ index: i, label: p.label, major: false }))
+      .filter((t) => t.index % step === 0 || t.index === points.length - 1);
+  }
+
+  const ts = points.map((p) => p.ts as number);
+  const bucketMs = ts[1] - ts[0];
+  const spanMs = ts[ts.length - 1] - ts[0] + bucketMs;
+  const days = spanMs / DAY;
+
+  // A single day: every third hour.
+  if (days <= 1.05) {
+    const every = Math.max(1, Math.round((3 * HOUR) / bucketMs));
+    return ts
+      .map((t, i) => ({ index: i, label: hourLabel(t), major: false }))
+      .filter((t) => t.index % every === 0);
+  }
+
+  // Up to two weeks: dates at midnight, hour marks between them.
+  if (days <= 14) {
+    // Between midnights: 3 marks for ≤3 days, 1 mark (noon) up to a week, none after.
+    const marksPerDay = days <= 3 ? 3 : days <= 7 ? 1 : 0;
+    const markEvery = marksPerDay > 0 ? DAY / (marksPerDay + 1) : Infinity;
+    const out: Tick[] = [];
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i];
+      if (isMidnight(t)) {
+        out.push({ index: i, label: dayLabel(t), major: true });
+        continue;
+      }
+      if (marksPerDay === 0) continue;
+      const sinceMidnight = t - new Date(t).setHours(0, 0, 0, 0);
+      if (Math.abs((sinceMidnight % markEvery) - 0) < bucketMs / 2 && sinceMidnight > 0) {
+        out.push({ index: i, label: hourLabel(t), major: false });
+      }
+    }
+    return out;
+  }
+
+  // Longer: dates only, at most ~8 of them.
+  const midnights = ts
+    .map((t, i) => ({ index: i, label: dayLabel(t), major: true }))
+    .filter((t) => isMidnight(ts[t.index]));
+  const step = Math.max(1, Math.ceil(midnights.length / 8));
+  return midnights.filter((_, i) => i % step === 0 || i === midnights.length - 1);
 }
 
 /**
@@ -73,8 +155,10 @@ export function AreaChart({
     return { path: d, area: a, max: niceMax, points: pts };
   }, [data, H]);
 
+  const ticks = useMemo(() => timeTicks(data), [data]);
+
   const fmt = (v: number) => (format === "cost" ? formatCost(v) : compactNumber(v));
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
 
   if (data.length === 0) {
     return (
@@ -86,6 +170,13 @@ export function AreaChart({
       </div>
     );
   }
+
+  const hovered = hover !== null ? points[hover] : null;
+  const hoverTitle = hovered
+    ? typeof hovered.ts === "number"
+      ? `${dayLabel(hovered.ts)} · ${hourLabel(hovered.ts)}`
+      : hovered.label
+    : "";
 
   return (
     <div className="relative w-full">
@@ -106,7 +197,7 @@ export function AreaChart({
         </defs>
 
         {/* horizontal grid + y axis labels */}
-        {ticks.map((t) => {
+        {yTicks.map((t) => {
           const y = PAD.top + (H - PAD.top - PAD.bottom) * (1 - t);
           return (
             <g key={t}>
@@ -132,6 +223,23 @@ export function AreaChart({
             </g>
           );
         })}
+
+        {/* day boundaries get a faint vertical rule so the eye can count days */}
+        {ticks
+          .filter((t) => t.major)
+          .map((t) => (
+            <line
+              key={`v${t.index}`}
+              x1={points[t.index].x}
+              x2={points[t.index].x}
+              y1={PAD.top}
+              y2={H - PAD.bottom}
+              stroke="var(--border)"
+              strokeWidth="1"
+              strokeDasharray="2 6"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
 
         <path d={area} fill={`url(#${gradientId})`} />
         <path
@@ -172,33 +280,33 @@ export function AreaChart({
           </g>
         ))}
 
-        {/* x axis labels — thinned so they never collide */}
-        {points.map((p, i) => {
-          const step = Math.ceil(points.length / 8);
-          if (i % step !== 0 && i !== points.length - 1) return null;
+        {/* x axis labels */}
+        {ticks.map((t) => {
+          const p = points[t.index];
+          if (!p) return null;
           return (
             <text
-              key={i}
+              key={t.index}
               x={p.x}
               y={H - 8}
-              textAnchor="middle"
-              className="fill-[var(--text-subtle)]"
-              style={{ fontSize: 11 }}
+              textAnchor={t.index === 0 ? "start" : t.index === points.length - 1 ? "end" : "middle"}
+              className={t.major ? "fill-[var(--text-muted)]" : "fill-[var(--text-subtle)]"}
+              style={{ fontSize: 11, fontWeight: t.major ? 600 : 400 }}
             >
-              {p.label}
+              {t.label}
             </text>
           );
         })}
       </svg>
 
-      {hover !== null && points[hover] && (
+      {hovered && (
         <div
           className="pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-2.5 py-1.5 shadow-[var(--shadow-md)]"
-          style={{ left: `${(points[hover].x / W) * 100}%`, top: `${(points[hover].y / H) * 100}%` }}
+          style={{ left: `${(hovered.x / W) * 100}%`, top: `${(hovered.y / H) * 100}%` }}
         >
-          <p className="text-[11px] text-[var(--text-subtle)]">{points[hover].label}</p>
+          <p className="whitespace-nowrap text-[11px] text-[var(--text-subtle)]">{hoverTitle}</p>
           <p className="font-display text-sm font-semibold tabular-nums text-[var(--text)]">
-            {fmt(points[hover].value)}
+            {fmt(hovered.value)}
           </p>
         </div>
       )}

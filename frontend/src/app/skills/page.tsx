@@ -11,6 +11,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useLocalStorage } from "@/hooks/useApi";
 import { SKILL_CATEGORIES, SKILL_LIBRARY } from "@/lib/catalog/skills";
+import { aiRank } from "@/lib/api";
+import { shortModelName } from "@/lib/format";
 import { cx } from "@/lib/format";
 
 const AI_SUGGESTIONS = [
@@ -28,11 +30,17 @@ export default function SkillsPage() {
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState<string | null>(null);
   const [aiMatch, setAiMatch] = useState<string[] | null>(null);
+  const [aiReasons, setAiReasons] = useState<Record<string, string>>({});
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const filtered = useMemo(() => {
     let list = SKILL_LIBRARY;
 
-    if (aiMatch) list = list.filter((s) => aiMatch.includes(s.id));
+    if (aiMatch) {
+      const order = new Map(aiMatch.map((id, i) => [id, i]));
+      list = list.filter((s) => order.has(s.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    }
     if (kind === "skills") list = list.filter((s) => s.kind === "skill");
     if (kind === "plugins") list = list.filter((s) => s.kind === "plugin");
     if (kind === "enabled") list = list.filter((s) => enabled.includes(s.id));
@@ -51,20 +59,49 @@ export default function SkillsPage() {
   }, [query, kind, category, enabled, aiMatch]);
 
   /**
-   * Keyword match over the library stands in for the routing model. It is
-   * labelled as such rather than presented as an AI answer.
+   * OptiAI search: every skill's name and one-line summary go to the fastest
+   * tested model, which returns the five that fit the sentence, with reasons.
+   * Falls back to a plain keyword match — labelled as such — when no model
+   * is available, so the bar never dead-ends.
    */
-  function handleAiSearch(q: string) {
-    const words = q.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-    const scored = SKILL_LIBRARY.map((skill) => {
-      const haystack = `${skill.name} ${skill.summary} ${skill.detail} ${skill.tags.join(" ")}`.toLowerCase();
-      return { id: skill.id, score: words.filter((w) => haystack.includes(w)).length };
-    })
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score);
-
-    setAiMatch(scored.length > 0 ? scored.map((s) => s.id) : []);
+  async function handleAiSearch(q: string) {
+    setAiBusy(true);
+    setAiNote(null);
     setQuery("");
+    try {
+      const out = await aiRank({
+        query: q,
+        limit: 5,
+        candidates: SKILL_LIBRARY.map((s) => ({
+          id: s.id,
+          name: `${s.name} [${s.kind}, ${s.category}]`,
+          description: s.summary,
+        })),
+      });
+      setAiMatch(out.results.map((r) => r.id));
+      setAiReasons(Object.fromEntries(out.results.map((r) => [r.id, r.reason])));
+      setAiNote(
+        out.results.length > 0
+          ? `Top ${out.results.length} for “${q}”, chosen by ${shortModelName(out.model)}.`
+          : `${shortModelName(out.model)} found nothing in the library for “${q}”.`
+      );
+    } catch (err) {
+      const words = q.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+      const scored = SKILL_LIBRARY.map((skill) => {
+        const haystack = `${skill.name} ${skill.summary} ${skill.detail} ${skill.tags.join(" ")}`.toLowerCase();
+        return { id: skill.id, score: words.filter((w) => haystack.includes(w)).length };
+      })
+        .filter((s) => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+      setAiMatch(scored.map((s) => s.id));
+      setAiReasons({});
+      setAiNote(
+        `${err instanceof Error ? err.message : "No model available"} — showing a keyword match instead.`
+      );
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   function toggle(id: string, next: boolean) {
@@ -81,24 +118,29 @@ export default function SkillsPage() {
         <AiSearchBar
           aiPlaceholder="Say OptiAI what you want…"
           searchPlaceholder="Search skills and plugins by name, tag or category…"
-          onAiSubmit={handleAiSearch}
+          onAiSubmit={(q) => void handleAiSearch(q)}
           onQueryChange={setQuery}
           suggestions={AI_SUGGESTIONS}
+          busy={aiBusy}
         />
-        {aiMatch && (
+        {(aiMatch || aiBusy) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--brand-soft-border)] bg-[var(--brand-soft)] px-3.5 py-2.5">
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
+            <Sparkles className={cx("h-3.5 w-3.5 shrink-0 text-[var(--brand)]", aiBusy && "think-pulse")} />
             <p className="flex-1 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
-              {aiMatch.length > 0
-                ? `Matched ${aiMatch.length} skill${aiMatch.length === 1 ? "" : "s"} in the library. This is a keyword match — semantic search runs once a provider is connected.`
-                : "Nothing in the library matches that yet."}
+              {aiBusy ? "OptiAI is reading the library…" : aiNote}
             </p>
-            <button
-              onClick={() => setAiMatch(null)}
-              className="text-[12px] font-semibold text-[var(--brand)] hover:underline"
-            >
-              Clear
-            </button>
+            {aiMatch && (
+              <button
+                onClick={() => {
+                  setAiMatch(null);
+                  setAiReasons({});
+                  setAiNote(null);
+                }}
+                className="text-[12px] font-semibold text-[var(--brand)] hover:underline"
+              >
+                Clear
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -135,7 +177,7 @@ export default function SkillsPage() {
           description="Try another term, or clear the category filter."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {filtered.map((skill) => {
             const isOn = enabled.includes(skill.id);
             return (
@@ -174,6 +216,12 @@ export default function SkillsPage() {
                 <p className="mt-2.5 flex-1 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
                   {skill.summary}
                 </p>
+                {aiReasons[skill.id] && (
+                  <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--brand-soft)] px-2.5 py-1.5 text-[12px] leading-snug text-[var(--text-muted)]">
+                    <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-[var(--brand)]" />
+                    {aiReasons[skill.id]}
+                  </p>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <Badge tone={skill.kind === "plugin" ? "accent" : "brand"}>{skill.kind}</Badge>

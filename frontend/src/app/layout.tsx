@@ -6,6 +6,7 @@ import { ThemeProvider, themeInitScript } from "@/hooks/useTheme";
 import { ChatStoreProvider } from "@/hooks/useChatStore";
 import { StreamsProvider } from "@/hooks/useStreams";
 import { ChatModeProvider } from "@/hooks/useChatMode";
+import { SplitViewProvider } from "@/hooks/useSplitView";
 
 /**
  * Type pairing: Plus Jakarta Sans for headings — its geometric, slightly
@@ -36,7 +37,13 @@ export const metadata: Metadata = {
   title: "OptiAI",
   description:
     "One layer over every AI provider — route, optimize, and understand your model usage.",
-  icons: { icon: "/logo-mark.png" },
+  // The gradient mark on a square canvas; the old PNG was a crop that carried
+  // the top of the wordmark along with it.
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+    apple: "/logo-mark.svg",
+  },
 };
 
 export const viewport: Viewport = {
@@ -58,7 +65,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ChatStoreProvider>
             <StreamsProvider>
               <ChatModeProvider>
-                <AppShell>{children}</AppShell>
+                <SplitViewProvider>
+                  <AppShell>{children}</AppShell>
+                </SplitViewProvider>
               </ChatModeProvider>
             </StreamsProvider>
           </ChatStoreProvider>
