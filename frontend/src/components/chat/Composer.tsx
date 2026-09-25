@@ -8,7 +8,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
 } from "react";
-import { AlertTriangle, ArrowUp, FileText, ImageIcon, Paperclip, Square, Wand2, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, FileText, ImageIcon, Paperclip, Sparkles, Square, Wand2, X } from "lucide-react";
 import { BorderBeam } from "border-beam";
 import { ModelPicker, type ModelChoice } from "./ModelPicker";
 import { LogoMark } from "@/components/ui/Logo";
@@ -50,6 +50,9 @@ export function Composer({
   allowedModels,
   promptMode,
   onPromptModeChange,
+  skillsOn,
+  skillsCount,
+  onSkillsChange,
   autoFocus,
 }: {
   onSend: (text: string, attachments: Attachment[]) => void;
@@ -62,6 +65,11 @@ export function Composer({
   allowedModels?: string[];
   promptMode: boolean;
   onPromptModeChange: (next: boolean) => void;
+  /** Whether OptiAI skills are injected into this browser's chat turns. */
+  skillsOn?: boolean;
+  /** How many skills would apply to the next turn. */
+  skillsCount?: number;
+  onSkillsChange?: (next: boolean) => void;
   autoFocus?: boolean;
 }) {
   const [text, setText] = useState("");
@@ -294,6 +302,34 @@ export function Composer({
             >
               <Wand2 className="h-3.5 w-3.5" />
               Prompt mode
+            </button>
+          )}
+
+          {onSkillsChange && (
+            <button
+              type="button"
+              onClick={() => onSkillsChange(!skillsOn)}
+              aria-pressed={Boolean(skillsOn)}
+              title={
+                skillsOn
+                  ? `Skills on — ${skillsCount ?? 0} OptiAI skill${skillsCount === 1 ? "" : "s"} shape the next reply. Click to send without them.`
+                  : "Skills off — replies use the model alone. Click to apply your enabled OptiAI skills."
+              }
+              className={cx(
+                "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium",
+                "transition-all duration-150 ease-out active:scale-[0.96]",
+                skillsOn
+                  ? "bg-[var(--brand-soft)] text-[var(--brand)] ring-1 ring-[var(--brand-soft-border)]"
+                  : "text-[var(--text-subtle)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Skills
+              {skillsOn && typeof skillsCount === "number" && (
+                <span className="rounded-full bg-[var(--brand)] px-1.5 text-[10.5px] font-semibold leading-4 text-white">
+                  {skillsCount}
+                </span>
+              )}
             </button>
           )}
 

@@ -44,13 +44,14 @@ export async function begin({
   turnCount = 0,
   mode,
   source = "chat",
+  skills = [],
 }) {
   const db = await getStore();
   db.run(
     `INSERT INTO optiai_traces
        (promptId, threadId, messageId, createdAt, status, source, mode,
-        requestedModel, provider, promptChars, turnCount)
-     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+        requestedModel, provider, promptChars, turnCount, skills)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(promptId) DO NOTHING`,
     [
       promptId,
@@ -63,6 +64,7 @@ export async function begin({
       provider || providerOf(requestedModel),
       promptChars,
       turnCount,
+      Array.isArray(skills) && skills.length ? skills.join(",") : null,
     ]
   );
   return promptId;
@@ -256,6 +258,7 @@ function toTrace(row) {
     tokenSource: row.estimated === 1 ? "estimated" : "reported",
     ttftMs: row.ttftMs,
     latencyMs: row.latencyMs,
+    skills: typeof row.skills === "string" && row.skills ? row.skills.split(",") : [],
   };
 }
 

@@ -10,7 +10,8 @@ import { Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { ProviderAvatar } from "@/components/ui/ProviderAvatar";
-import { ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { ErrorNote } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonCode } from "@/components/ui/Skeleton";
 import { getApiKeys, getCliConfig, getCliTools } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 
@@ -86,7 +87,18 @@ export default function ConnectToolPage({ params }: { params: Promise<{ tool: st
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-[900px] px-6 py-6">
-        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-3 w-24" />
+        <div className="mt-4 flex items-center gap-3">
+          <Skeleton delay={40} className="h-11 w-11 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <Skeleton delay={40} className="h-5 w-[35%]" />
+            <Skeleton delay={40} className="h-3 w-[55%]" />
+          </div>
+        </div>
+        <div className="mt-6 space-y-4">
+          <SkeletonCode lines={3} delay={80} />
+          <SkeletonCode lines={5} delay={120} />
+        </div>
       </div>
     );
   }

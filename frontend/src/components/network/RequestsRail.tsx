@@ -2,7 +2,7 @@
 
 import { Layers } from "lucide-react";
 import { StatusDot } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/EmptyState";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { cx, formatNumber, formatRelativeTime, shortModelName } from "@/lib/format";
 import type { PromptTrace } from "@/lib/types";
 
@@ -42,11 +42,7 @@ export function RequestsRail({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <div className="space-y-1.5 p-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 rounded-md" />
-            ))}
-          </div>
+          <SkeletonRows count={8} leading="none" trailing={1} height="h-9" className="p-4" />
         ) : rows.length === 0 ? (
           <div className="grid h-full place-items-center p-6 text-center">
             <div>

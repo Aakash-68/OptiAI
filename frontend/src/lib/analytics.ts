@@ -176,30 +176,28 @@ export function deriveScores(stats: UsageStats | null): AnalyticsReport {
 
   if (inputPerRequest > 8000) {
     suggestions.push({
-      title: "Compress long prompts before they leave OptiAI",
-      detail: `At ~${compactNumber(inputPerRequest)} input tokens per request, the RTK filter chain typically removes 15–60% with no loss of meaning.`,
-      skillId: "prompt-compressor",
+      title: "Cut output tokens with Caveman",
+      detail: `At ~${compactNumber(inputPerRequest)} input tokens per request the replies are likely long too. Caveman keeps every technical fact and drops the filler.`,
+      skillId: "caveman",
     });
     suggestions.push({
       title: "Prune stale conversation turns",
-      detail: "Long threads keep re-sending turns that no longer affect the answer.",
-      skillId: "context-pruner",
+      detail: "Long threads keep re-sending turns that no longer affect the answer. Start a new thread once the topic moves on.",
     });
   }
 
   if (modelCount <= 2) {
     suggestions.push({
       title: "Route easy prompts to a cheaper model",
-      detail: "Classify each prompt and send the simple ones to a smaller model in the same combo.",
-      skillId: "model-router",
+      detail: "Build a combo under Models with a small model first, so routine prompts stop hitting your most expensive one.",
     });
   }
 
   if (costPerRequest > 0.02) {
     suggestions.push({
-      title: "Put a ceiling on daily spend",
-      detail: `At ${formatCost(costPerRequest)} per request, a busy day compounds quickly. Cost Guard downgrades instead of failing.`,
-      skillId: "cost-guard",
+      title: "Write less code per request",
+      detail: `At ${formatCost(costPerRequest)} per request, a busy day compounds quickly. Ponytail pushes the model to the smallest change that works.`,
+      skillId: "ponytail",
     });
   }
 

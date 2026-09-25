@@ -30,6 +30,12 @@ import type {
   AiAnalysis,
   AiOptifyResult,
   AiRankResult,
+  SkillDefinition,
+  SkillDetail,
+  SkillInfluence,
+  SkillsResponse,
+  SkillSyncResult,
+  SkillTargetsResponse,
 } from "./types";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:20180";
@@ -338,6 +344,40 @@ export async function exportPdf(body: {
   return await res.blob();
 }
 
+/* -- Skills ---------------------------------------------------------------- */
+
+export function listSkills() {
+  return request<SkillsResponse>("/skills");
+}
+
+export function getSkill(id: string) {
+  return request<SkillDetail>(`/skills/${encodeURIComponent(id)}`);
+}
+
+export function updateSkill(id: string, patch: { enabled?: boolean; influence?: SkillInfluence }) {
+  return request<SkillDefinition>(`/skills/${encodeURIComponent(id)}`, { method: "PATCH", body: patch });
+}
+
+export function updateSkillSettings(patch: { chatApply?: boolean }) {
+  return request<{ chatApply: boolean }>("/skills/settings", { method: "PATCH", body: patch });
+}
+
+export function skillTargets(projectDir?: string) {
+  const qs = projectDir ? `?projectDir=${encodeURIComponent(projectDir)}` : "";
+  return request<SkillTargetsResponse>(`/skills/targets${qs}`);
+}
+
+export function syncSkills(body: { tool: string; scope: "user" | "project"; projectDir?: string }) {
+  return request<SkillSyncResult>("/skills/sync", { method: "POST", body });
+}
+
+export function uninstallSkills(body: { tool: string; scope: "user" | "project"; projectDir?: string }) {
+  return request<{ tool: string; scope: string; root: string; removed: string[] }>("/skills/uninstall", {
+    method: "POST",
+    body,
+  });
+}
+
 /* -- Chat ------------------------------------------------------------------ */
 
 export interface ChatRequest {
@@ -354,6 +394,11 @@ export interface ChatRequest {
   threadId?: string;
   messageId?: string;
   mode?: string;
+  /**
+   * Which OptiAI skills to apply to this turn. `apply: false` sends none;
+   * `ids` limits to a Project's picks; omitted means every enabled skill.
+   */
+  skills?: { apply?: boolean; ids?: string[] };
 }
 
 export interface ChatChunk {
@@ -362,6 +407,8 @@ export interface ChatChunk {
   model?: string;
   /** Yielded once, first, as soon as the response headers land. */
   promptId?: string;
+  /** Yielded with promptId: the skill ids the backend injected. */
+  skills?: string[];
 }
 
 /**
@@ -384,6 +431,7 @@ export async function* streamChat(
   });
 
   const promptId = res.headers.get("x-optiai-prompt-id") || undefined;
+  const appliedSkills = (res.headers.get("x-optiai-skills") || "").split(",").filter(Boolean);
 
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
@@ -397,7 +445,7 @@ export async function* streamChat(
     throw new ChatError(message, res.status, promptId);
   }
 
-  if (promptId) yield { promptId };
+  if (promptId) yield { promptId, skills: appliedSkills };
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

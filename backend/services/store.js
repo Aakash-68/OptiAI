@@ -72,6 +72,9 @@ const SCHEMA = [
  */
 const ADDED_COLUMNS = [
   `ALTER TABLE optiai_model_tests ADD COLUMN connectionName TEXT`,
+  // Comma-separated ids of the OptiAI skills injected into this prompt, so
+  // Usage can show which skills shaped a reply.
+  `ALTER TABLE optiai_traces ADD COLUMN skills TEXT`,
 ];
 
 /**

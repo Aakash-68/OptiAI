@@ -339,6 +339,78 @@ export interface PromptTrace {
   tokenSource: "reported" | "estimated";
   ttftMs?: number | null;
   latencyMs?: number | null;
+  /** OptiAI skill ids injected into this prompt (in-app chat only). */
+  skills?: string[];
+}
+
+/* -- Skills ---------------------------------------------------------------- */
+
+export type SkillKind = "skill" | "plugin";
+export type SkillInfluence = "low" | "medium" | "high";
+
+export interface SkillDefinition {
+  id: string;
+  name: string;
+  kind: SkillKind;
+  category: string;
+  summary: string;
+  detail: string;
+  /** The SKILL.md frontmatter description - what the CLI shows the model. */
+  description: string;
+  author: string;
+  version: string;
+  source: { type: "vendored" | "optiai"; url?: string; path?: string; license?: string; commit?: string };
+  influence: SkillInfluence;
+  defaultInfluence: SkillInfluence;
+  enabled: boolean;
+  defaultEnabled?: boolean;
+  tokenImpact?: string;
+  tags: string[];
+  requires?: string;
+  bytes: number;
+  approxTokens: number;
+}
+
+export interface SkillsResponse {
+  skills: SkillDefinition[];
+  chatApply: boolean;
+  enabledCount: number;
+  dir: string;
+}
+
+export interface SkillDetail extends SkillDefinition {
+  content: string;
+}
+
+export type SkillInstallStatus = "managed" | "stale" | "foreign" | "absent";
+
+export interface SkillTarget {
+  tool: "claude" | "codex" | "opencode" | string;
+  name: string;
+  scope: "user" | "project";
+  root: string;
+  note?: string;
+  exists: boolean;
+  managed: number;
+  stale: number;
+  foreign: number;
+  pending: number;
+  skills: { id: string; enabled: boolean; status: SkillInstallStatus; installedAt?: string }[];
+}
+
+export interface SkillTargetsResponse {
+  enabledCount: number;
+  targets: SkillTarget[];
+}
+
+export interface SkillSyncResult {
+  tool: string;
+  scope: string;
+  root: string;
+  written: string[];
+  removed: string[];
+  skipped: { id: string; reason: string }[];
+  note?: string;
 }
 
 export interface TraceSummary {
@@ -427,6 +499,8 @@ export interface ChatMessage {
      * never passes OptiAI's words off as the user's.
      */
     refined?: boolean;
+    /** OptiAI skills the backend injected for this turn. */
+    skills?: string[];
   };
   createdAt: string;
 }

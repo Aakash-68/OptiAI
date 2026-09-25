@@ -82,7 +82,10 @@ OptiAI/
 │   │
 │   ├── api/index.js              # OptiAI HTTP surface (Express routers)
 │   ├── config/providers.js       # the 16 supported providers — single source of truth
+│   ├── skills/                   # the skill library: catalog.json + one SKILL.md folder per skill
 │   ├── services/                 # OptiAI service layer — the ONLY caller of 9router/
+│   │   ├── skills.js             #   catalog, enable/influence state, chat injection
+│   │   └── skillInstall.js       #   writes SKILL.md folders into Claude Code / Codex / OpenCode
 │   ├── server/                   # bootstrap + the alias resolver hook
 │   ├── .env.example
 │   └── package.json
@@ -123,8 +126,7 @@ OptiAI/
 │           ├── types.ts          #     response shapes (backend-backed only)
 │           ├── nav.ts            #     sidebar definition
 │           ├── format.ts         #     shared number/cost/time formatters
-│           ├── analytics.ts      #     score derivation from real usage
-│           └── catalog/skills.ts #     the curated skill library
+│           └── analytics.ts      #     score derivation from real usage
 │
 ├── docs/9router-extraction.md    # path-by-path extraction map
 ├── package.json                  # npm run app
@@ -238,7 +240,7 @@ frontend  →  OptiAI API (/api/chat)  →  services/gateway.js
 | Translator debug console, console-log dashboard | dev tooling, not product |
 | i18n | English-only for now |
 | TTS / STT / image / video / embeddings / web-search handlers | out of scope for this build; each is one isolated handler to re-add later |
-| MCP bridge | **deferred** — OptiAI's skills/plugins system is a new feature, not 9Router's MCP bridge |
+| MCP bridge | **deferred** — OptiAI's skills system (see [Skills](#skills)) is its own feature, not 9Router's MCP bridge |
 | Headroom / PXPIPE sidecar processes | only the inert in-tree modules came along as import dependencies; no sidecar is spawned |
 | Static `skills/` link list | markdown pointing at GitHub; zero runtime logic |
 | Docker / CapRover config | not needed yet |
@@ -296,6 +298,10 @@ the database once a provider is connected.
 | POST | `/api/optimizer/compress` | run one RTK filter (or autodetect) over text |
 | POST | `/api/optimizer/compress-body` | run RTK over a full chat body |
 | POST | `/api/optimizer/inject-preview` | preview caveman/ponytail system injection |
+| GET | `/api/skills` \| `/api/skills/:id` | the skill library with state; one skill with its SKILL.md |
+| PATCH | `/api/skills/:id` \| `/api/skills/settings` | enable / influence per skill; apply-in-chat switch |
+| GET | `/api/skills/targets?projectDir=` | install status per CLI tool and scope |
+| POST | `/api/skills/sync` \| `/api/skills/uninstall` | **write enabled skills to a CLI's skills folder** / remove OptiAI-managed ones |
 | GET | `/api/cli/tools` \| `/config` \| `/keys` | CLI gateway info and local API keys |
 | POST | `/v1/chat/completions` \| `/v1/messages` \| `/v1/responses` | raw gateway for real CLI tools |
 
@@ -317,7 +323,7 @@ navigating away. The topbar is empty on every tab except Chat, where it carries 
 | **Providers** | The 16 supported providers with real brand marks. Connect by API key (validated, then saved) or OAuth (genuine authorize then exchange). Detail page carries connections, round-robin, and a model grid where clicking a tile toggles it: green selected, grey off, red when a live test failed. | fully live |
 | **Usage** | KPI tiles, token/cost trend, distribution by model/provider/endpoint, input-output split, and the raw request log. | fully live |
 | **Analytics** | Three 0–100 gauges — **Efficiency**, **Model Fit**, **Prompt Craft** — each with its reasoning, plus pros/cons and suggestions that link to the skill implementing them. Derived deterministically from recorded usage; no model call. | derived from live usage |
-| **Skills** | The curated OptiAI library with enable/disable toggles. Arbitrary Git repositories cannot be installed — a repo becomes available only once OptiAI adds it. | static catalog |
+| **Skills** | The OptiAI library: 22 real SKILL.md skills under `backend/skills/` (12 vendored from reviewed repos at pinned commits, 10 written by OptiAI). Per-skill enable and a Low / Medium / High influence level. **Install to your CLI** writes enabled skills into Claude Code, Codex or OpenCode's skills folder so they auto-invoke from their description; in-app chat sends them as standing instructions instead. Arbitrary Git repositories cannot be installed. | `/api/skills/*` (live) |
 | **Connect** | CLI integration center. Issue gateway keys, then per tool get the exact PowerShell / CMD / bash commands to run yourself, plus a smoke test. | `/api/cli/*` (live) |
 | **Settings** | Theme, chat defaults, live backend/DB/router status, local-data reset. | live status |
 
@@ -390,6 +396,42 @@ model is tested alone so any OAuth refresh settles before the rest fan out — o
 concurrent calls race on the same refresh token.
 
 These are billable requests. They are also the only honest way to know a model works.
+
+## Skills
+
+Every skill is a folder under `backend/skills/<id>/` holding a `SKILL.md` (Anthropic Agent
+Skills format: YAML frontmatter with `name` and `description`, Markdown body). `catalog.json`
+beside them is the library: metadata, source, default influence, tags. Nothing outside it is
+installable.
+
+- **Vendored** (SKILL.md and any `references/` copied verbatim at a pinned commit): caveman,
+  caveman-commit, caveman-review (juliusbrussee/caveman); ponytail, ponytail-review
+  (dietrichgebert/ponytail); emil-design-eng, animate, apple-design (emilkowalski/skills);
+  tasteful-output, anti-slop-audit (dnh33/tasteful-llm); graphify (Graphify-Labs/graphify);
+  super-mem (franksde/supermemory-cli, the Supermemory agent skill).
+- **OptiAI-authored**: handoff-md, sql-queries, doc-writer, research-brief, frontend-engineering,
+  backend-engineering, api-design, code-craft, prompt-porter, spec-writer.
+
+**Influence** is one setting per skill and means the same thing everywhere:
+
+| Level | In OptiAI chat | On the CLI |
+| --- | --- | --- |
+| High | full SKILL.md sent, "always apply" | installed, model auto-invokes it |
+| Medium | full SKILL.md sent, "apply when the request matches" | installed, model auto-invokes it |
+| Low | only name + description sent | installed with `disable-model-invocation`, so only `/name` runs it |
+
+**CLI install** copies files (no symlinks, so the CLI never depends on OptiAI running) into
+`~/.claude/skills/<id>/`, `~/.codex/skills/<id>/` or `~/.config/opencode/skills/<id>/`, or a
+project's `.claude/skills/` / `.opencode/skills/`. Each folder carries an `.optiai.json` marker;
+folders without one are never modified or removed. Sync writes enabled skills and removes
+managed folders for disabled ones. This is the only place OptiAI writes under a developer's
+tool directory, and it happens only on an explicit click.
+
+**Chat** has no disk, so `/api/chat` accepts `skills: { apply, ids }` and prepends the chosen
+skills as one system block using 9Router's own format-aware injector. The composer's Skills
+switch toggles it per browser; a thread inside a Project sends that Project's picks. The applied
+ids come back on the `x-optiai-skills` header, sit on the message's details menu, and are stored
+on the trace row (Usage → Prompts).
 
 ## Known limitations
 

@@ -7,7 +7,7 @@ import { LogoMark } from "@/components/ui/Logo";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { checkNetworkProvider, getModelTests, getNetwork } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { cx, formatLatency, formatRelativeTime, shortModelName } from "@/lib/format";

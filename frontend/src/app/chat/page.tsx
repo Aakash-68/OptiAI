@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Lightbulb, Plug, ScanSearch } from "lucide-react";
 import { Composer } from "@/components/chat/Composer";
 import type { ModelChoice } from "@/components/chat/ModelPicker";
@@ -11,7 +11,12 @@ import { useChatMode } from "@/hooks/useChatMode";
 import { useStreams } from "@/hooks/useStreams";
 import { useProjects } from "@/hooks/useProjects";
 import { useLocalStorage } from "@/hooks/useApi";
+import { useSkills } from "@/hooks/useSkills";
 import { usePane } from "@/hooks/useSplitView";
+import { takePendingPrompt } from "@/lib/pendingPrompt";
+
+/** Characters of each project source file sent per turn. */
+const PROJECT_FILE_CHARS = 24_000;
 import {
   buildContent,
   buildTranscriptText,
@@ -143,6 +148,23 @@ export default function ChatPage() {
     [active?.projectId, projects]
   );
   const allowedModels = project?.models?.length ? project.models : undefined;
+  /**
+   * What a project contributes to every turn: its standing instructions and
+   * the text of its source files. Files are capped per file so one large
+   * source cannot crowd out the conversation; the cap is stated inline so the
+   * model knows it is reading an excerpt.
+   */
+  const projectContext = useMemo(() => {
+    if (!project) return null;
+    const parts: string[] = [];
+    if (project.instructions.trim()) parts.push(project.instructions.trim());
+    for (const f of project.files || []) {
+      if (!f.content) continue;
+      const text = f.content.length > PROJECT_FILE_CHARS ? `${f.content.slice(0, PROJECT_FILE_CHARS)}\n[… truncated at ${PROJECT_FILE_CHARS} characters]` : f.content;
+      parts.push(`<source name="${f.name}">\n${text}\n</source>`);
+    }
+    return parts.length ? `Project "${project.name}" context:\n${parts.join("\n\n")}` : null;
+  }, [project]);
   const [model, setModel] = useLocalStorage<ModelChoice | null>("optiai.defaultModel", null);
   const { isStreaming, begin, end, stop } = useStreams();
   // Whether *this* conversation is busy. Another one generating in the
@@ -151,6 +173,19 @@ export default function ChatPage() {
   // On by default: Ask handing back a prompt is the behaviour people
   // expect from it. Off chains the refined prompt straight into an answer.
   const [promptMode, setPromptMode] = useLocalStorage("optiai.promptMode", true);
+  // Whether this browser's chat turns carry the enabled OptiAI skills. A
+  // thread inside a project uses that project's picks; otherwise the enabled set.
+  const [skillsOn, setSkillsOn] = useLocalStorage("optiai.skillsInChat", true);
+  const { enabled: enabledSkills, chatApply } = useSkills();
+  const projectSkillIds = useMemo(
+    () => (project ? [...(project.skills || []), ...(project.plugins || [])] : []),
+    [project]
+  );
+  const skillsCount = !chatApply
+    ? 0
+    : projectSkillIds.length > 0
+      ? projectSkillIds.length
+      : enabledSkills.length;
 
   // Landing on /chat with no selection opens the most recent thread rather than
   // stranding the user on an empty screen with a populated sidebar.
@@ -183,6 +218,7 @@ export default function ChatPage() {
     // Minted by the backend before the request reaches any provider and returned
     // on the response headers, so it is available even if the stream then fails.
     let promptId: string | undefined;
+    let appliedSkills: string[] = [];
 
     try {
       for await (const chunk of streamChat(
@@ -195,13 +231,8 @@ export default function ChatPage() {
                 ? `${FORMAT_INSTRUCTION}\n${FILE_INSTRUCTION}`
                 : FORMAT_INSTRUCTION,
             },
-            ...(project?.instructions.trim()
-              ? [
-                  {
-                    role: "system" as const,
-                    content: `Project "${project.name}" context:\n${project.instructions.trim()}`,
-                  },
-                ]
+            ...(projectContext
+              ? [{ role: "system" as const, content: projectContext }]
               : []),
             ...priorTurns,
             { role: "user", content: outgoing },
@@ -209,15 +240,20 @@ export default function ChatPage() {
           threadId,
           messageId: assistantId,
           mode: turnMode,
+          skills: {
+            apply: skillsOn,
+            ids: projectSkillIds.length > 0 ? projectSkillIds : undefined,
+          },
         },
         controller.signal
       )) {
         if (chunk.promptId) {
           promptId = chunk.promptId;
+          appliedSkills = chunk.skills ?? [];
           // Written immediately: a turn that is still streaming is already
           // traceable, and a later crash cannot lose the id.
           updateMessage(threadId, assistantId, {
-            meta: { model: resolvedModel, provider: chosen.provider, promptId },
+            meta: { model: resolvedModel, provider: chosen.provider, promptId, skills: appliedSkills },
           });
         }
         if (chunk.delta) {
@@ -234,6 +270,7 @@ export default function ChatPage() {
           model: resolvedModel,
           provider: chosen.provider,
           promptId,
+          skills: appliedSkills,
           promptTokens: usage?.prompt_tokens ?? usage?.input_tokens,
           completionTokens: usage?.completion_tokens ?? usage?.output_tokens,
           latencyMs: performance.now() - startedAt,
@@ -408,6 +445,23 @@ export default function ChatPage() {
 
   const hasMessages = (active?.messages.length ?? 0) > 0;
 
+  /**
+   * A first message typed on a project page. It is sent once the thread is
+   * selected and a model is available; the ref guards against the effect
+   * re-firing while the turn streams. Without a model the text is put in
+   * the transcript as an error-free hint by leaving the pending entry in
+   * place, so choosing a model and pressing send is all that is needed.
+   */
+  const pendingSentFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeId || pane || !model || pendingSentFor.current === activeId) return;
+    const text = takePendingPrompt(activeId);
+    if (!text) return;
+    pendingSentFor.current = activeId;
+    void send(text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, model, pane]);
+
   return (
     <div className="flex h-full flex-col">
       {hasMessages ? (
@@ -427,6 +481,9 @@ export default function ChatPage() {
                 allowedModels={allowedModels}
                 promptMode={promptMode}
                 onPromptModeChange={setPromptMode}
+                skillsOn={skillsOn}
+                skillsCount={skillsCount}
+                onSkillsChange={setSkillsOn}
               />
               <p className="mt-2 text-center text-[11px] text-[var(--text-subtle)]">
                 Responses are routed through OptiAI. Token counts and cost are recorded per request.
@@ -458,6 +515,9 @@ export default function ChatPage() {
               allowedModels={allowedModels}
               promptMode={promptMode}
               onPromptModeChange={setPromptMode}
+              skillsOn={skillsOn}
+              skillsCount={skillsCount}
+              onSkillsChange={setSkillsOn}
               autoFocus
             />
 

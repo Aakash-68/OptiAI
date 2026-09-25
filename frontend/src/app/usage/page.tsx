@@ -19,7 +19,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { SearchInput } from "@/components/ui/Input";
 import { Badge, StatusDot } from "@/components/ui/Badge";
-import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { EmptyState, ErrorNote } from "@/components/ui/EmptyState";
+import { SkeletonChart, SkeletonRows, SkeletonStat } from "@/components/ui/Skeleton";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
 import { AreaChart } from "@/components/charts/AreaChart";
 import { BarList, RatioBar } from "@/components/charts/BarList";
@@ -208,7 +209,7 @@ export default function UsagePage() {
       {/* KPI row */}
       <div className="mb-5 grid grid-cols-2 gap-3 @3xl:grid-cols-3 @5xl:grid-cols-5">
         {stats.loading ? (
-          Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-xl" />)
+          Array.from({ length: 5 }).map((_, i) => <SkeletonStat key={i} index={i} />)
         ) : (
           <>
             <StatCard
@@ -293,7 +294,7 @@ export default function UsagePage() {
               />
             </div>
             {chart.loading ? (
-              <Skeleton className="h-[220px] rounded-lg" />
+              <SkeletonChart height="h-[220px]" />
             ) : (
               <AreaChart
                 data={series}
@@ -372,11 +373,7 @@ export default function UsagePage() {
           </div>
 
           {recent.loading ? (
-            <div className="space-y-2 p-5">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 rounded-lg" />
-              ))}
-            </div>
+            <SkeletonRows count={8} leading="square" trailing={3} className="p-5" />
           ) : recentRows.length === 0 ? (
             <div className="p-5">
               <EmptyState
@@ -536,11 +533,7 @@ function PromptsTable({
       )}
 
       {loading ? (
-        <div className="space-y-2 p-5">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 rounded-lg" />
-          ))}
-        </div>
+        <SkeletonRows count={6} leading="none" trailing={3} className="p-5" />
       ) : rows.length === 0 ? (
         <div className="p-5">
           <EmptyState
@@ -656,6 +649,11 @@ function PromptsTable({
                                 ? "estimated (provider reported none)"
                                 : "reported by provider"
                             }
+                          />
+                          <Detail
+                            label="OptiAI skills"
+                            value={row.skills && row.skills.length ? row.skills.join(", ") : "none"}
+                            mono={Boolean(row.skills && row.skills.length)}
                           />
                           <Detail label="Started" value={new Date(row.createdAt).toLocaleString()} />
                           <Detail

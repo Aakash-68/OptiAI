@@ -6,6 +6,7 @@ import { Check, ChevronDown, Layers, Plug, Zap } from "lucide-react";
 import Link from "next/link";
 import { getCombos, getTestedModels } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { cx, shortModelName } from "@/lib/format";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
 import { CapabilityIcons } from "@/components/models/CapabilityIcons";
@@ -200,9 +201,12 @@ export function ModelPicker({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
             {loading && (
-              <p className="px-2 py-3 text-center text-[12px] text-[var(--text-subtle)]">
-                Checking which models are reachable…
-              </p>
+              <div className="px-1 py-1">
+                <SkeletonRows count={5} leading="circle" trailing={1} height="h-9" />
+                <p className="px-2 pb-1 pt-2 text-center text-[11.5px] text-[var(--text-subtle)]">
+                  Checking which models are reachable…
+                </p>
+              </div>
             )}
 
             {isEmpty && (

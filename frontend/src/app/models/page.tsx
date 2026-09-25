@@ -12,7 +12,8 @@ import { LogoMark } from "@/components/ui/Logo";
 import { aiRank } from "@/lib/api";
 import { shortModelName } from "@/lib/format";
 import { Tabs } from "@/components/ui/Tabs";
-import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { EmptyState, ErrorNote } from "@/components/ui/EmptyState";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import {
   AddModelDialog,
   CreateComboDialog,
@@ -270,11 +271,7 @@ export default function ModelsPage() {
           </div>
 
           {loading ? (
-            <div className="space-y-px">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-[58px] rounded-lg" />
-              ))}
-            </div>
+            <SkeletonRows count={8} leading="circle" trailing={3} height="h-[58px]" className="space-y-px" />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Blocks className="h-5 w-5" />}

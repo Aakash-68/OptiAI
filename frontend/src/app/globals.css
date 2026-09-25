@@ -582,3 +582,38 @@ select:focus-visible {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Skeleton shimmer (components/ui/Skeleton.tsx)
+   A highlight sweeps across each placeholder: transform-only, so it runs off
+   the main thread and keeps moving while the page is busy fetching. Linear,
+   because it is constant motion. Siblings are offset with animation-delay by
+   the component so a grid reads as one wave. The global reduced-motion rule
+   above collapses the sweep to a single frame, leaving quiet grey shapes.
+--------------------------------------------------------------------------- */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-hover);
+  /* Blocks that use `animationDelay` inherit it onto the sweep below. */
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--surface-raised) 70%, transparent) 45%,
+    color-mix(in oklab, var(--brand) 14%, transparent) 55%,
+    transparent 100%
+  );
+  animation: skeleton-sweep 1.6s linear infinite;
+  animation-delay: inherit;
+}
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}

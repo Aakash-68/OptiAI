@@ -13,6 +13,8 @@ import * as cli from "../services/cli.js";
 import * as trace from "../services/trace.js";
 import * as chatLog from "../services/chatLog.js";
 import * as exporter from "../services/export.js";
+import * as skills from "../services/skills.js";
+import * as skillInstall from "../services/skillInstall.js";
 import { routeChat } from "../services/gateway.js";
 
 const wrap = (handler) => async (req, res) => {
@@ -159,6 +161,18 @@ export function createApiRouter() {
     }
   });
 
+  // -- Skills ---------------------------------------------------------------
+  // The library lives in backend/skills; state (enabled, influence) in the
+  // settings row. Install routes write SKILL.md folders onto this machine so
+  // the developer's CLI discovers them - only ever on an explicit sync.
+  api.get("/skills", wrap(() => skills.list()));
+  api.get("/skills/targets", wrap((req) => skillInstall.targets({ projectDir: req.query.projectDir })));
+  api.patch("/skills/settings", wrap((req) => skills.updateSettingsPatch(req.body || {})));
+  api.post("/skills/sync", wrap((req) => skillInstall.sync(req.body || {})));
+  api.post("/skills/uninstall", wrap((req) => skillInstall.uninstall(req.body || {})));
+  api.get("/skills/:id", wrap((req) => skills.get(req.params.id)));
+  api.patch("/skills/:id", wrap((req) => skills.update(req.params.id, req.body || {})));
+
   api.get("/cli/tools", wrap(() => cli.listTools()));
   api.get("/cli/config", wrap((req) => cli.config(req.query.tool || "claude")));
   api.get("/cli/keys", wrap(() => cli.keys()));
@@ -178,10 +192,19 @@ export function createApiRouter() {
 
     // OptiAI-only fields: strip them before the body reaches 9Router, which
     // validates against the OpenAI schema and would reject unknown keys.
-    const { threadId, messageId, mode, ...upstreamBody } = req.body || {};
+    const { threadId, messageId, mode, skills: skillOpts, ...upstreamBody } = req.body || {};
     const requestedModel = upstreamBody.model;
     const messages = Array.isArray(upstreamBody.messages) ? upstreamBody.messages : [];
     const lastUserTurn = [...messages].reverse().find((m) => m.role === "user");
+
+    // OptiAI skills for the in-app chat. The CLI path never does this: there
+    // the skills live on disk and the tool applies them itself.
+    let appliedSkills = [];
+    try {
+      appliedSkills = await skills.applyToChatBody(upstreamBody, skillOpts || {});
+    } catch (error) {
+      console.error("[api] skills apply:", error);
+    }
 
     const collector = trace.createCollector();
     let carry = "";
@@ -239,6 +262,7 @@ export function createApiRouter() {
         promptChars: typeof lastUserTurn?.content === "string" ? lastUserTurn.content.length : 0,
         turnCount: messages.length,
         source: "chat",
+        skills: appliedSkills,
       });
 
       // 9Router derives the client's wire format partly from the request path
@@ -257,8 +281,9 @@ export function createApiRouter() {
         bodyOverride: upstreamBody,
         extraHeaders: {
           "x-optiai-prompt-id": promptId,
+          "x-optiai-skills": appliedSkills.join(","),
           // Without this the browser cannot read the header on a cross-origin fetch.
-          "access-control-expose-headers": "x-optiai-prompt-id",
+          "access-control-expose-headers": "x-optiai-prompt-id, x-optiai-skills",
         },
         onText: (text, done) => {
           carry = trace.observeSseText(collector, text, carry);

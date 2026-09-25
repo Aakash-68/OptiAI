@@ -33,11 +33,27 @@ export interface Project {
   plugins: string[];
   /** Pinned projects sort to the top of the list. */
   pinned?: boolean;
-  files: { id: string; name: string; size: number; addedAt: string }[];
+  /**
+   * Sources: text files kept with the project. `content` is the file's text,
+   * sent as context with every chat in the project. Images and binaries are
+   * not accepted here; drop those into a single chat instead.
+   */
+  files: ProjectFile[];
   color: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ProjectFile {
+  id: string;
+  name: string;
+  size: number;
+  addedAt: string;
+  content?: string;
+}
+
+/** Per-file cap. localStorage is the store, so this stays modest. */
+export const MAX_PROJECT_FILE_BYTES = 200 * 1024;
 
 const PALETTE = ["#8e55fb", "#2f80fc", "#10b981", "#f59e0b", "#ef4444", "#6768fb"];
 
@@ -88,6 +104,33 @@ export function useProjects() {
     [setProjects]
   );
 
+  const addFile = useCallback(
+    (projectId: string, file: Omit<ProjectFile, "id" | "addedAt">) => {
+      const entry: ProjectFile = { ...file, id: newId(), addedAt: new Date().toISOString() };
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? { ...p, files: [entry, ...(p.files || [])], updatedAt: entry.addedAt }
+            : p
+        )
+      );
+      return entry.id;
+    },
+    [setProjects]
+  );
+
+  const removeFile = useCallback(
+    (projectId: string, fileId: string) =>
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? { ...p, files: (p.files || []).filter((f) => f.id !== fileId), updatedAt: new Date().toISOString() }
+            : p
+        )
+      ),
+    [setProjects]
+  );
+
   return {
     projects,
     hydrated,
@@ -95,6 +138,8 @@ export function useProjects() {
     updateProject,
     deleteProject,
     togglePinned,
+    addFile,
+    removeFile,
     palette: PALETTE,
   };
 }

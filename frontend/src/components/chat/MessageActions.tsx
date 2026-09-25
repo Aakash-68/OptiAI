@@ -178,6 +178,11 @@ export function MessageActions({ content, meta }: { content: string; meta: Meta 
               {meta.latencyMs !== undefined && (
                 <Detail label="Time">{formatLatency(meta.latencyMs)}</Detail>
               )}
+              {meta.skills && meta.skills.length > 0 && (
+                <Detail label="Skills">
+                  <span className="font-mono">{meta.skills.join(", ")}</span>
+                </Detail>
+              )}
               {meta.fellBackFrom && meta.fellBackFrom.length > 0 && (
                 <Detail label="Fell back">
                   <span className="text-warn-600 dark:text-warn-500">

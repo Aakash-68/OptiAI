@@ -5,7 +5,8 @@ import { Plug } from "lucide-react";
 import { PageContainer } from "@/components/layout/AppShell";
 import { SearchInput } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
-import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { EmptyState, ErrorNote } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonTile, stagger } from "@/components/ui/Skeleton";
 import { ProviderCard } from "@/components/providers/ProviderCard";
 import { ConnectDialog } from "@/components/providers/ConnectDialog";
 import { getModels } from "@/lib/api";
@@ -82,7 +83,15 @@ export default function ProvidersPage() {
       {loading ? (
         <div className="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i} className="h-[196px] rounded-2xl" />
+            <SkeletonTile
+              key={i}
+              index={i}
+              icon="circle"
+              lines={2}
+              badges={2}
+              className="rounded-2xl"
+              footer={<Skeleton delay={stagger(i)} className="h-8 w-full rounded-lg" />}
+            />
           ))}
         </div>
       ) : filtered.length === 0 ? (

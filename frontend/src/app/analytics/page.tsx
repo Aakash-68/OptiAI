@@ -16,7 +16,8 @@ import {
   Zap,
 } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
-import { EmptyState, ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { EmptyState, ErrorNote } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonGauge, SkeletonRow, SkeletonText, stagger } from "@/components/ui/Skeleton";
 import { ScoreCard, type ScoreTone } from "@/components/charts/ScoreCard";
 import { aiAnalyze, getLastAnalysis, getUsageStats } from "@/lib/api";
 import { useLocalStorage } from "@/hooks/useApi";
@@ -27,7 +28,7 @@ import { formatNumber, formatRelativeTime, shortModelName } from "@/lib/format";
 import type { AiAnalysis } from "@/lib/types";
 import { useApi } from "@/hooks/useApi";
 import { deriveScores, type ScoreBreakdown } from "@/lib/analytics";
-import { SKILL_LIBRARY } from "@/lib/catalog/skills";
+import { useSkills } from "@/hooks/useSkills";
 import { cx } from "@/lib/format";
 
 const PERIODS = [
@@ -74,6 +75,7 @@ const SCORE_STYLE: Record<
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState("30d");
   const { data, loading, error } = useApi(() => getUsageStats(period), [period]);
+  const library = useSkills();
 
   const report = useMemo(() => deriveScores(data), [data]);
 
@@ -150,10 +152,18 @@ export default function AnalyticsPage() {
         <div className="space-y-4">
           <div className="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-[170px] rounded-2xl" />
+              <SkeletonGauge key={i} index={i} />
             ))}
           </div>
-          <Skeleton className="h-[190px] rounded-2xl" />
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            <Skeleton delay={stagger(3)} className="h-3.5 w-[30%]" />
+            <SkeletonText lines={3} delay={stagger(3)} className="mt-4" />
+            <div className="mt-4 space-y-2.5">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <SkeletonRow key={i} index={i + 4} leading="square" trailing={1} height="h-12" className="border border-[var(--border)] bg-[var(--surface-sunken)]" />
+              ))}
+            </div>
+          </div>
         </div>
       ) : !report.hasData ? (
         <EmptyState
@@ -302,7 +312,7 @@ export default function AnalyticsPage() {
             ) : (
               <div className="mt-4 space-y-2.5">
                 {report.suggestions.map((suggestion, i) => {
-                  const skill = SKILL_LIBRARY.find((s) => s.id === suggestion.skillId);
+                  const skill = library.skills.find((s) => s.id === suggestion.skillId);
                   return (
                     <div
                       key={i}

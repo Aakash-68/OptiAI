@@ -6,7 +6,8 @@ import { ChevronRight, Globe, Link2, Plus, RotateCw, Trash2, Wrench } from "luci
 import { SearchInput } from "@/components/ui/Input";
 import { CopyButton } from "@/components/ui/CodeBlock";
 import { CliToolLogo } from "@/components/ui/CliToolLogo";
-import { ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { ErrorNote } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonTile } from "@/components/ui/Skeleton";
 import { createApiKey, deleteApiKey, getApiKeys, getCliTools } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { cx } from "@/lib/format";
@@ -96,7 +97,10 @@ export default function ConnectPage() {
             className="@3xl:pl-6"
           >
             {keys.loading ? (
-              <Skeleton className="h-[38px] rounded-lg" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-[38px] flex-1 rounded-lg" />
+                <Skeleton delay={40} className="h-[38px] w-20 rounded-lg" />
+              </div>
             ) : activeKey ? (
               <div className="flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded-lg border border-[var(--border)] bg-[var(--surface-sunken)] px-3 py-2 font-mono text-[12.5px] text-[var(--text)]">
@@ -168,7 +172,7 @@ export default function ConnectPage() {
       {loading ? (
         <div className="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-2xl" />
+            <SkeletonTile key={i} index={i} lines={1} badges={1} icon="square" className="rounded-2xl" />
           ))}
         </div>
       ) : (

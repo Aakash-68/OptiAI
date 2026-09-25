@@ -6,7 +6,7 @@ import { Folder, MessageSquare, Pin, Plus, Search, Settings2, Trash2 } from "luc
 import { LogoMark } from "@/components/ui/Logo";
 import { aiOptify } from "@/lib/api";
 import { useModelCatalog } from "@/hooks/useModelCatalog";
-import { SKILL_LIBRARY } from "@/lib/catalog/skills";
+import { useSkills } from "@/hooks/useSkills";
 import { shortModelName } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -14,6 +14,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Tabs } from "@/components/ui/Tabs";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ProjectScopePicker } from "@/components/projects/ProjectScopePicker";
+import { ProjectSettingsModal } from "@/components/projects/ProjectSettingsModal";
 import { useProjects, type Project } from "@/hooks/useProjects";
 import { useChatStore } from "@/hooks/useChatStore";
 import { cx } from "@/lib/format";
@@ -41,11 +42,12 @@ export default function ProjectsPage() {
   const router = useRouter();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [editing, setEditing] = useState<Project | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
   const catalog = useModelCatalog();
+  const library = useSkills();
   const [optifying, setOptifying] = useState(false);
   const [optifyNote, setOptifyNote] = useState<string | null>(null);
 
@@ -68,7 +70,7 @@ export default function ProjectsPage() {
         models: catalog.models
           .filter((m) => m.connected)
           .map((m) => ({ id: m.id, name: m.name, provider: m.providerName })),
-        skills: SKILL_LIBRARY.map((s) => ({ id: s.id, name: s.name, kind: s.kind, summary: s.summary })),
+        skills: library.skills.map((s) => ({ id: s.id, name: s.name, kind: s.kind, summary: s.summary })),
       });
       apply({ models: out.models, skills: out.skills, plugins: out.plugins });
       setOptifyNote(
@@ -181,9 +183,9 @@ export default function ProjectsPage() {
               >
                 <td className="py-3">
                   <button
-                    onClick={() => startChat(project)}
+                    onClick={() => router.push(`/projects/${project.id}`)}
                     className="flex min-w-0 items-center gap-3 text-left"
-                    title={`Start a chat in ${project.name}`}
+                    title={`Open ${project.name}`}
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--surface)]">
                       <Folder className="h-4 w-4 text-[var(--text-muted)]" />
@@ -215,7 +217,7 @@ export default function ProjectsPage() {
                     <IconButton label="Start a chat" onClick={() => startChat(project)}>
                       <MessageSquare className="h-3.5 w-3.5" />
                     </IconButton>
-                    <IconButton label="Project settings" onClick={() => setEditing(project)}>
+                    <IconButton label="Project settings" onClick={() => setEditingId(project.id)}>
                       <Settings2 className="h-3.5 w-3.5" />
                     </IconButton>
                     <IconButton label="Delete project" onClick={() => deleteProject(project.id)} danger>
@@ -299,64 +301,13 @@ export default function ProjectsPage() {
         </div>
       </Modal>
 
-      <Modal
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        title={editing ? `${editing.name} settings` : ""}
-        footer={
-          <Button variant="primary" onClick={() => setEditing(null)}>
-            Done
-          </Button>
-        }
-      >
-        {editing && (
-          <div className="space-y-3.5">
-            <Input
-              label="Name"
-              value={editing.name}
-              onChange={(e) => {
-                updateProject(editing.id, { name: e.target.value });
-                setEditing({ ...editing, name: e.target.value });
-              }}
-            />
-            <Field label="Standing instructions">
-              <Textarea
-                value={editing.instructions}
-                rows={3}
-                onChange={(e) => {
-                  updateProject(editing.id, { instructions: e.target.value });
-                  setEditing({ ...editing, instructions: e.target.value });
-                }}
-              />
-            </Field>
-            <div>
-              <p className="mb-1.5 text-[13px] font-medium text-[var(--text)]">
-                What this project can use
-              </p>
-              <ProjectScopePicker
-                models={editing.models || []}
-                skills={editing.skills || []}
-                plugins={editing.plugins || []}
-                onChange={(patch) => {
-                  updateProject(editing.id, patch);
-                  setEditing({ ...editing, ...patch });
-                }}
-              />
-              <OptifyRow
-                busy={optifying}
-                note={optifyNote}
-                disabled={!editing.name.trim() && !editing.description.trim()}
-                onClick={() =>
-                  void optify(editing.name, editing.description, (patch) => {
-                    updateProject(editing.id, patch);
-                    setEditing((e) => (e ? { ...e, ...patch } : e));
-                  })
-                }
-              />
-            </div>
-          </div>
-        )}
-      </Modal>
+      {editingId && (
+        <ProjectSettingsModal
+          project={projects.find((p) => p.id === editingId) || null}
+          onClose={() => setEditingId(null)}
+          onChange={updateProject}
+        />
+      )}
     </div>
   );
 }

@@ -21,7 +21,8 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
-import { ErrorNote, Skeleton } from "@/components/ui/EmptyState";
+import { ErrorNote } from "@/components/ui/EmptyState";
+import { Skeleton, SkeletonRows, SkeletonTile } from "@/components/ui/Skeleton";
 import { ConnectDialog } from "@/components/providers/ConnectDialog";
 import { BulkConnectDialog } from "@/components/providers/BulkConnectDialog";
 import { ModelGrid } from "@/components/providers/ModelGrid";
@@ -153,8 +154,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
         <BackLink />
         {loadingProviders ? (
           <div className="space-y-4">
-            <Skeleton className="h-16 w-full rounded-xl" />
-            <Skeleton className="h-40 w-full rounded-xl" />
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-5 w-[30%]" />
+                <Skeleton className="h-3 w-[50%]" />
+              </div>
+              <Skeleton delay={40} className="h-9 w-28 rounded-lg" />
+            </div>
+            <SkeletonRows count={2} leading="square" trailing={2} height="h-14" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2" />
+            <div className="grid gap-2.5 @xl:grid-cols-2 @4xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonTile key={i} index={i + 2} lines={0} badges={1} icon="none" className="rounded-xl" />
+              ))}
+            </div>
           </div>
         ) : (
           <ErrorNote
@@ -394,7 +407,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ id: s
           {loadingModels ? (
             <div className="grid gap-2.5 @xl:grid-cols-2 @4xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-[72px] rounded-xl" />
+                <SkeletonTile key={i} index={i} lines={0} badges={1} icon="none" className="rounded-xl p-4" />
               ))}
             </div>
           ) : models.length === 0 ? (

@@ -42,14 +42,9 @@ export function EmptyState({
   );
 }
 
-export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div
-      className={cx("animate-pulse rounded-md bg-[var(--surface-hover)]", className)}
-      aria-hidden
-    />
-  );
-}
+// The loading placeholders moved to their own module with shaped variants;
+// re-exported here so the existing imports keep working.
+export { Skeleton } from "./Skeleton";
 
 /** Inline error strip for failed fetches — never swallow a backend error. */
 export function ErrorNote({ message, className }: { message: string; className?: string }) {

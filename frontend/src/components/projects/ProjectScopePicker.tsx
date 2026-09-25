@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { Tabs } from "@/components/ui/Tabs";
 import { ProviderLogo } from "@/components/ui/ProviderLogo";
-import { SKILL_LIBRARY } from "@/lib/catalog/skills";
+import { useSkills } from "@/hooks/useSkills";
+import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useModelCatalog } from "@/hooks/useModelCatalog";
 import { cx } from "@/lib/format";
 
@@ -32,6 +33,7 @@ export function ProjectScopePicker({
   const [tab, setTab] = useState("models");
   const [query, setQuery] = useState("");
   const catalog = useModelCatalog();
+  const library = useSkills();
 
   const connected = useMemo(
     () => catalog.models.filter((m) => m.connected),
@@ -46,10 +48,10 @@ export function ProjectScopePicker({
       )
     : connected;
 
-  const skillRows = SKILL_LIBRARY.filter(
+  const skillRows = library.skills.filter(
     (s) => s.kind === "skill" && (!q || s.name.toLowerCase().includes(q))
   );
-  const pluginRows = SKILL_LIBRARY.filter(
+  const pluginRows = library.skills.filter(
     (s) => s.kind === "plugin" && (!q || s.name.toLowerCase().includes(q))
   );
 
@@ -85,7 +87,7 @@ export function ProjectScopePicker({
       <div className="mt-2 max-h-[220px] space-y-0.5 overflow-y-auto rounded-lg border border-[var(--border)] p-1">
         {tab === "models" &&
           (catalog.loading ? (
-            <Row label="Loading connected models…" muted />
+            <SkeletonRows count={5} leading="circle" trailing={1} height="h-9" />
           ) : modelRows.length === 0 ? (
             <Row
               label={
@@ -109,14 +111,20 @@ export function ProjectScopePicker({
           ))}
 
         {tab === "skills" &&
-          skillRows.map((s) => (
-            <PickRow
-              key={s.id}
-              selected={skills.includes(s.id)}
-              onClick={() => onChange({ skills: toggle(skills, s.id) })}
-              label={s.name}
-              hint={s.category}
-            />
+          (library.loading && skillRows.length === 0 ? (
+            <SkeletonRows count={5} leading="square" trailing={1} height="h-9" />
+          ) : library.error ? (
+            <Row label={`Skill library unavailable: ${library.error}`} muted />
+          ) : (
+            skillRows.map((s) => (
+              <PickRow
+                key={s.id}
+                selected={skills.includes(s.id)}
+                onClick={() => onChange({ skills: toggle(skills, s.id) })}
+                label={s.name}
+                hint={s.category}
+              />
+            ))
           ))}
 
         {tab === "plugins" &&

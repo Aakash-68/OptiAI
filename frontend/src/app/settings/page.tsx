@@ -7,7 +7,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { Badge, StatusDot } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/EmptyState";
+import { SkeletonStat } from "@/components/ui/Skeleton";
 import { ModelPicker, type ModelChoice } from "@/components/chat/ModelPicker";
 import { getHealth } from "@/lib/api";
 import { useApi, useLocalStorage } from "@/hooks/useApi";
@@ -105,7 +105,11 @@ export default function SettingsPage() {
         <Card>
           <CardHeader title="System" description="Live status of the OptiAI backend" />
           {loading ? (
-            <Skeleton className="mt-4 h-24 rounded-lg" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonStat key={i} index={i} />
+              ))}
+            </div>
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <InfoTile
